@@ -115,13 +115,17 @@ export function AddCharacterCard({ onAdd }: AddCharacterCardProps) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Card className="cursor-pointer border-dashed hover:border-primary/50 transition-colors" />}>
-        <CardContent className="p-4 flex items-center justify-center gap-2 h-[88px]">
+      <DialogTrigger
+        render={
+          <button className="w-full text-left rounded-xl border border-dashed border-border hover:border-primary/50 transition-colors" />
+        }
+      >
+        <div className="p-4 flex items-center justify-center gap-2 h-[88px]">
           <div className="flex items-center gap-2 text-muted-foreground text-sm">
             <User className="size-4" />
             <span>添加角色</span>
           </div>
-        </CardContent>
+        </div>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
