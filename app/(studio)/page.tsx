@@ -146,11 +146,12 @@ function CreateProjectDialog({ onCreated }: { onCreated: (project: ProjectData) 
 }
 
 export default function HomePage() {
+  const router = useRouter();
   const { projects, setProjects } = useProjectStore();
-  const [loaded, setLoaded] = useState(projects.length > 0);
 
   const handleCreated = (project: ProjectData) => {
     setProjects([project, ...projects]);
+    router.push(`/projects/${project.id}`);
   };
 
   return (
