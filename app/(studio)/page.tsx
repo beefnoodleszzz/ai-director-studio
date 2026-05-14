@@ -15,7 +15,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -24,38 +23,110 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Film, Plus, ChevronRight, Clock, Clapperboard } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Film, Plus, ChevronRight, Clock, Clapperboard, Trash2 } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
 
-function ProjectCard({ project }: { project: ProjectData }) {
+function ProjectCard({
+  project,
+  onDeleted,
+}: {
+  project: ProjectData;
+  onDeleted: (id: string) => void;
+}) {
   const router = useRouter();
   const { setCurrentProject } = useProjectStore();
+  const [deleting, setDeleting] = useState(false);
 
   const completedEps = project.episodes?.filter((e) => e.status === "completed").length ?? 0;
   const totalEps = project.episodes?.length ?? 0;
 
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await axios.delete(`/api/projects/${project.id}`);
+      onDeleted(project.id);
+      toast.success(`「${project.title}」已删除`);
+    } catch {
+      toast.error("删除失败，请重试");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
-    <Card
-      className="group cursor-pointer hover:border-primary/40 transition-all duration-200 hover:shadow-lg hover:shadow-primary/5"
-      onClick={() => {
-        setCurrentProject(project);
-        router.push(`/projects/${project.id}`);
-      }}
-    >
+    <Card className="group relative hover:border-primary/40 transition-all duration-200 hover:shadow-lg hover:shadow-primary/5">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
           <div className="size-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
             <Film className="size-5 text-primary" />
           </div>
-          <ChevronRight className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity mt-1" />
+          <AlertDialog>
+            <AlertDialogTrigger
+              render={
+                <button className="opacity-0 group-hover:opacity-100 transition-opacity size-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10" />
+              }
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Trash2 className="size-3.5" />
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>确认删除项目？</AlertDialogTitle>
+                <AlertDialogDescription>
+                  将永久删除「{project.title}」及其所有集数、分镜、生成资产，此操作不可撤销。
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>取消</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive/10 text-destructive hover:bg-destructive/20 border-0"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                >
+                  {deleting ? "删除中..." : "确认删除"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
-        <CardTitle className="text-base leading-snug mt-2">{project.title}</CardTitle>
-        <CardDescription className="text-xs line-clamp-2">
+        <CardTitle
+          className="text-base leading-snug mt-2 cursor-pointer"
+          onClick={() => {
+            setCurrentProject(project);
+            router.push(`/projects/${project.id}`);
+          }}
+        >
+          {project.title}
+        </CardTitle>
+        <CardDescription
+          className="text-xs line-clamp-2 cursor-pointer"
+          onClick={() => {
+            setCurrentProject(project);
+            router.push(`/projects/${project.id}`);
+          }}
+        >
           {project.globalLore || "无世界观描述"}
         </CardDescription>
       </CardHeader>
-      <CardContent className="pt-0">
+      <CardContent
+        className="pt-0 cursor-pointer"
+        onClick={() => {
+          setCurrentProject(project);
+          router.push(`/projects/${project.id}`);
+        }}
+      >
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <div className="flex items-center gap-1.5">
             <Clapperboard className="size-3" />
@@ -147,11 +218,16 @@ function CreateProjectDialog({ onCreated }: { onCreated: (project: ProjectData) 
 
 export default function HomePage() {
   const router = useRouter();
-  const { projects, setProjects } = useProjectStore();
+  const { projects, setProjects, setCurrentProject } = useProjectStore();
 
   const handleCreated = (project: ProjectData) => {
     setProjects([project, ...projects]);
+    setCurrentProject(project);
     router.push(`/projects/${project.id}`);
+  };
+
+  const handleDeleted = (id: string) => {
+    setProjects(projects.filter((p) => p.id !== id));
   };
 
   return (
@@ -180,7 +256,7 @@ export default function HomePage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {projects.map((project) => (
-            <ProjectCard key={project.id} project={project} />
+            <ProjectCard key={project.id} project={project} onDeleted={handleDeleted} />
           ))}
         </div>
       )}
