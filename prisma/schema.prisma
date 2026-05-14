@@ -1,0 +1,50 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Project {
+  id         String      @id @default(uuid())
+  title      String
+  globalLore String
+  createdAt  DateTime    @default(now())
+  characters Character[]
+  episodes   Episode[]
+}
+
+model Character {
+  id          String  @id @default(uuid())
+  projectId   String
+  name        String
+  prompt      String
+  refImageUrl String
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model Episode {
+  id         String  @id @default(uuid())
+  projectId  String
+  episodeNum Int
+  summary    String
+  status     String  @default("draft")
+  scenes     Scene[]
+  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model Scene {
+  id           String  @id @default(uuid())
+  episodeId    String
+  sceneOrder   Int
+  visualPrompt String
+  dialogue     String
+  audioPrompt  String
+  localImage   String?
+  localVideo   String?
+  localAudio   String?
+  status       String  @default("pending")
+  episode      Episode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+}
