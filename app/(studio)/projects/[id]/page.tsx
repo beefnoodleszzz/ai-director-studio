@@ -40,6 +40,8 @@ import {
   Image,
   BookImage,
 } from "lucide-react";
+import { NewCharacterInterceptModal } from "@/components/studio/NewCharacterInterceptModal";
+import type { NewCharacterDraft, SceneCard as SceneCardType } from "@/types";
 
 type AspectRatio = "16:9" | "9:16";
 
@@ -70,6 +72,11 @@ export default function ProjectPage({
 
   const [loading, setLoading] = useState(true);
   const [scriptInput, setScriptInput] = useState("");
+
+  // 角色拦截状态机
+  const [interceptOpen, setInterceptOpen] = useState(false);
+  const [interceptNewChars, setInterceptNewChars] = useState<NewCharacterDraft[]>([]);
+  const [pendingScenes, setPendingScenes] = useState<SceneCardType[]>([]);
   const [generatingScript, setGeneratingScript] = useState(false);
   const [generatingImages, setGeneratingImages] = useState(false);
   const [generatingVideos, setGeneratingVideos] = useState(false);
@@ -182,20 +189,88 @@ export default function ProjectPage({
     if (!scriptInput.trim()) { toast.error("请输入剧本内容"); return; }
     setGeneratingScript(true);
     try {
-      const res = await axios.post("/api/generate/script", {
+      const res = await axios.post<{
+        status: "SUCCESS" | "NEED_CHARACTER_SETUP";
+        scenes?: SceneCardType[];
+        summary?: string;
+        data?: {
+          newCharacters: NewCharacterDraft[];
+          pendingScenes: SceneCardType[];
+          summary: string;
+        };
+      }>("/api/generate/script", {
         episodeId: currentEpisode.id,
         script: scriptInput,
-        characters: currentProject?.characters ?? [],
       });
-      replaceScenes(currentEpisode.id, res.data.scenes);
-      updateEpisode(currentEpisode.id, { summary: res.data.summary });
-      toast.success(`拆解完成，共 ${res.data.scenes.length} 个分镜`);
-      setActiveStep(2);
+
+      if (res.data.status === "NEED_CHARACTER_SETUP" && res.data.data) {
+        // 🚨 拦截：发现新角色，唤起弹窗
+        const { newCharacters, pendingScenes: pending, summary } = res.data.data;
+        setInterceptNewChars(newCharacters);
+        setPendingScenes(pending);
+        updateEpisode(currentEpisode.id, { summary });
+        setInterceptOpen(true);
+        toast.warning(
+          `发现 ${newCharacters.length} 位新角色，请先建立视觉资产`,
+          { duration: 5000 }
+        );
+      } else if (res.data.status === "SUCCESS") {
+        // ✅ 无新角色，直接恢复
+        const scenes = (res.data as any).scenes;
+        replaceScenes(currentEpisode.id, scenes);
+        updateEpisode(currentEpisode.id, { summary: (res.data as any).summary });
+        toast.success(`拆解完成，共 ${scenes.length} 个分镜`);
+        setActiveStep(2);
+      }
     } catch {
       toast.error("剧本拆解失败，请检查 DEEPSEEK_API_KEY 配置");
     } finally {
       setGeneratingScript(false);
     }
+  };
+
+  /** 新角色全部入库后，释放拦截并批量写入分镜 */
+  const handleInterceptDone = async (
+    savedChars: { name: string; prompt: string; refImageUrl: string }[]
+  ) => {
+    if (!currentEpisode) return;
+    setInterceptOpen(false);
+    // 更新本地角色状态（CharacterData 无 projectId 字段）
+    savedChars.forEach((c, i) =>
+      addCharacter({ id: `new_${Date.now()}_${i}`, ...c })
+    );
+    try {
+      const res = await axios.post("/api/scenes/batch-create", {
+        episodeId: currentEpisode.id,
+        scenes: pendingScenes,
+      });
+      replaceScenes(currentEpisode.id, res.data.scenes);
+      toast.success(`分镜已恢复，共 ${res.data.scenes.length} 个镜头`);
+      setActiveStep(2);
+    } catch {
+      toast.error("分镜写入失败，请重试");
+    }
+    setPendingScenes([]);
+    setInterceptNewChars([]);
+  };
+
+  /** 用户选择跳过（不建立角色资产），直接用 pending 分镜落库 */
+  const handleInterceptSkip = async () => {
+    if (!currentEpisode) return;
+    setInterceptOpen(false);
+    try {
+      const res = await axios.post("/api/scenes/batch-create", {
+        episodeId: currentEpisode.id,
+        scenes: pendingScenes,
+      });
+      replaceScenes(currentEpisode.id, res.data.scenes);
+      toast.success(`已跳过角色建档，共 ${res.data.scenes.length} 个分镜`);
+      setActiveStep(2);
+    } catch {
+      toast.error("分镜写入失败");
+    }
+    setPendingScenes([]);
+    setInterceptNewChars([]);
   };
 
   const handleGenerateImages = async () => {
@@ -496,6 +571,17 @@ export default function ProjectPage({
           onStepClick={setActiveStep}
         />
       </div>
+
+      {/* 动态角色拦截弹窗 */}
+      {interceptOpen && (
+        <NewCharacterInterceptModal
+          open={interceptOpen}
+          projectId={id}
+          newCharacters={interceptNewChars}
+          onAllSaved={handleInterceptDone}
+          onCancel={handleInterceptSkip}
+        />
+      )}
 
       <ScrollArea className="flex-1">
         <div className="p-6 flex flex-col gap-6">

@@ -11,7 +11,13 @@ export interface CharacterRef {
   refImageUrl?: string;
 }
 
+export interface NewCharacterDraft {
+  name: string;
+  description: string;
+}
+
 export interface ScriptBreakdownResult {
+  newCharacters: NewCharacterDraft[];
   scenes: SceneCard[];
   episodeSummary: string;
 }
