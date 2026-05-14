@@ -7,13 +7,10 @@ import { StepWizard } from "@/components/studio/StepWizard";
 import { CharacterCard, AddCharacterCard } from "@/components/studio/CharacterCard";
 import { SceneCard } from "@/components/studio/SceneCard";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -38,7 +35,13 @@ import {
   Download,
   Loader2,
   Trash2,
+  Music,
+  Volume2,
+  Image,
+  BookImage,
 } from "lucide-react";
+
+type AspectRatio = "16:9" | "9:16";
 
 export default function ProjectPage({
   params,
@@ -71,26 +74,37 @@ export default function ProjectPage({
   const [generatingImages, setGeneratingImages] = useState(false);
   const [generatingVideos, setGeneratingVideos] = useState(false);
   const [generatingAudio, setGeneratingAudio] = useState(false);
+  const [generatingSfx, setGeneratingSfx] = useState(false);
   const [assembling, setAssembling] = useState(false);
+  const [exportingManga, setExportingManga] = useState(false);
   const [assembledPath, setAssembledPath] = useState<string | null>(null);
+  const [mangaPath, setMangaPath] = useState<string | null>(null);
+  const [aspect, setAspect] = useState<AspectRatio>("9:16");
   const [nextEpSeed, setNextEpSeed] = useState<string>("");
   const [deletingEp, setDeletingEp] = useState(false);
   const [deletingProject, setDeletingProject] = useState(false);
 
   useEffect(() => {
-    axios.get<ProjectData>(`/api/projects/${id}`).then((res) => {
-      setCurrentProject(res.data);
-      if (res.data.episodes.length > 0) {
-        setCurrentEpisode(res.data.episodes[res.data.episodes.length - 1]);
-      }
-      setLoading(false);
-    }).catch(() => {
-      toast.error("加载项目失败");
-      setLoading(false);
-    });
+    axios
+      .get<ProjectData>(`/api/projects/${id}`)
+      .then((res) => {
+        setCurrentProject(res.data);
+        if (res.data.episodes.length > 0) {
+          setCurrentEpisode(res.data.episodes[res.data.episodes.length - 1]);
+        }
+        setLoading(false);
+      })
+      .catch(() => {
+        toast.error("加载项目失败");
+        setLoading(false);
+      });
   }, [id, setCurrentProject, setCurrentEpisode]);
 
-  const handleAddCharacter = async (data: { name: string; prompt: string; refImageUrl: string }) => {
+  const handleAddCharacter = async (data: {
+    name: string;
+    prompt: string;
+    refImageUrl: string;
+  }) => {
     try {
       const res = await axios.post(`/api/projects/${id}/characters`, data);
       addCharacter(res.data);
@@ -117,6 +131,7 @@ export default function ProjectPage({
       setCurrentEpisode(res.data);
       setActiveStep(0);
       setAssembledPath(null);
+      setMangaPath(null);
       toast.success(`第 ${res.data.episodeNum} 集已创建`);
     } catch {
       toast.error("创建集失败");
@@ -128,14 +143,16 @@ export default function ProjectPage({
     setDeletingEp(true);
     try {
       await axios.delete(`/api/projects/${id}/episodes/${currentEpisode.id}`);
-      const remaining = (currentProject?.episodes ?? []).filter((e) => e.id !== currentEpisode.id);
-      updateEpisode(currentEpisode.id, { status: "deleted" });
+      const remaining = (currentProject?.episodes ?? []).filter(
+        (e) => e.id !== currentEpisode.id
+      );
       if (currentProject) {
         const updated = { ...currentProject, episodes: remaining };
         setCurrentProject(updated);
         setCurrentEpisode(remaining.length > 0 ? remaining[remaining.length - 1] : null);
       }
       setAssembledPath(null);
+      setMangaPath(null);
       toast.success(`第 ${currentEpisode.episodeNum} 集已删除`);
     } catch {
       toast.error("删除集失败");
@@ -168,13 +185,14 @@ export default function ProjectPage({
       const res = await axios.post("/api/generate/script", {
         episodeId: currentEpisode.id,
         script: scriptInput,
+        characters: currentProject?.characters ?? [],
       });
       replaceScenes(currentEpisode.id, res.data.scenes);
       updateEpisode(currentEpisode.id, { summary: res.data.summary });
       toast.success(`拆解完成，共 ${res.data.scenes.length} 个分镜`);
       setActiveStep(2);
     } catch {
-      toast.error("剧本拆解失败，请检查 API Key 配置");
+      toast.error("剧本拆解失败，请检查 DEEPSEEK_API_KEY 配置");
     } finally {
       setGeneratingScript(false);
     }
@@ -188,10 +206,13 @@ export default function ProjectPage({
       const results = res.data.results as Array<{ sceneId: string; localPath?: string }>;
       let ok = 0;
       results.forEach((r) => {
-        if (r.localPath) { updateScene(r.sceneId, { localImage: r.localPath, status: "image_done" }); ok++; }
+        if (r.localPath) {
+          updateScene(r.sceneId, { localImage: r.localPath, status: "image_done" });
+          ok++;
+        }
       });
       toast.success(`${ok}/${results.length} 个首帧生成成功`);
-      setActiveStep(3);
+      if (ok > 0) setActiveStep(3);
     } catch {
       toast.error("首帧生成失败");
     } finally {
@@ -202,9 +223,31 @@ export default function ProjectPage({
   const handleGenerateVideos = async () => {
     if (!currentEpisode) return;
     setGeneratingVideos(true);
+    toast.info("视频生成中（含质检重试），请耐心等待...");
     try {
-      await axios.post("/api/generate/video", { episodeId: currentEpisode.id });
-      toast.success("视频生成任务已提交");
+      const res = await axios.post("/api/generate/video", { episodeId: currentEpisode.id });
+      const results = res.data.results as Array<{
+        sceneId: string;
+        localPath?: string;
+        qa?: string;
+        attempts?: number;
+      }>;
+      let ok = 0;
+      results.forEach((r) => {
+        if (r.localPath) {
+          updateScene(r.sceneId, {
+            localVideo: r.localPath,
+            status: "video_done",
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            qaStatus: r.qa === "pass" ? "pass" : "qa_failed",
+          } as any);
+          ok++;
+        }
+      });
+      const degraded = results.filter((r) => r.qa === "degraded").length;
+      toast.success(
+        `${ok}/${results.length} 个视频生成完成${degraded > 0 ? `（${degraded} 个质检降级）` : ""}`
+      );
     } catch {
       toast.error("视频生成失败");
     } finally {
@@ -217,9 +260,15 @@ export default function ProjectPage({
     setGeneratingAudio(true);
     try {
       const res = await axios.post("/api/generate/audio", { episodeId: currentEpisode.id });
-      const results = res.data.results as Array<{ sceneId: string; localPath?: string; skipped?: boolean }>;
+      const results = res.data.results as Array<{
+        sceneId: string;
+        localPath?: string;
+        skipped?: boolean;
+      }>;
       const ok = results.filter((r) => r.localPath).length;
-      results.forEach((r) => { if (r.localPath) updateScene(r.sceneId, { localAudio: r.localPath }); });
+      results.forEach((r) => {
+        if (r.localPath) updateScene(r.sceneId, { localAudio: r.localPath });
+      });
       toast.success(`${ok} 个配音生成成功`);
     } catch {
       toast.error("配音生成失败");
@@ -228,11 +277,32 @@ export default function ProjectPage({
     }
   };
 
+  const handleGenerateSfx = async () => {
+    if (!currentEpisode) return;
+    setGeneratingSfx(true);
+    try {
+      const res = await axios.post("/api/generate/sfx", { episodeId: currentEpisode.id });
+      const results = res.data.results as Array<{ sceneId: string; localPath?: string }>;
+      const ok = results.filter((r) => r.localPath).length;
+      results.forEach((r) => {
+        if (r.localPath) updateScene(r.sceneId, { localSfx: r.localPath } as any);
+      });
+      toast.success(`${ok} 个环境音效生成成功`);
+    } catch {
+      toast.error("音效生成失败，请配置 SFX_API_KEY 或 TTS_API_KEY");
+    } finally {
+      setGeneratingSfx(false);
+    }
+  };
+
   const handleAssemble = async () => {
     if (!currentEpisode) return;
     setAssembling(true);
     try {
-      const res = await axios.post("/api/generate/assemble", { episodeId: currentEpisode.id });
+      const res = await axios.post("/api/generate/assemble", {
+        episodeId: currentEpisode.id,
+        aspect,
+      });
       setAssembledPath(res.data.outputPath);
       updateEpisode(currentEpisode.id, { status: "completed" });
       toast.success("合成完成！");
@@ -241,6 +311,20 @@ export default function ProjectPage({
       toast.error("合成失败，请确认 FFmpeg 已安装");
     } finally {
       setAssembling(false);
+    }
+  };
+
+  const handleExportManga = async () => {
+    if (!currentEpisode) return;
+    setExportingManga(true);
+    try {
+      const res = await axios.post("/api/export/manga", { episodeId: currentEpisode.id });
+      setMangaPath(res.data.outputPath);
+      toast.success("漫画长图导出成功！");
+    } catch {
+      toast.error("漫画导出失败");
+    } finally {
+      setExportingManga(false);
     }
   };
 
@@ -264,7 +348,9 @@ export default function ProjectPage({
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-12 w-full" />
         <div className="grid grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="aspect-video" />)}
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="aspect-video" />
+          ))}
         </div>
       </div>
     );
@@ -281,6 +367,9 @@ export default function ProjectPage({
   const scenes = currentEpisode?.scenes ?? [];
   const imagesDone = scenes.filter((s) => s.localImage).length;
   const videosDone = scenes.filter((s) => s.localVideo).length;
+  const audioDone = scenes.filter((s) => s.localAudio).length;
+  const sfxDone = scenes.filter((s) => (s as any).localSfx).length;
+  const qaFailed = scenes.filter((s) => (s as any).qaStatus === "qa_failed").length;
 
   return (
     <div className="flex flex-col h-full">
@@ -293,7 +382,6 @@ export default function ProjectPage({
               {currentProject.globalLore || "无世界观设定"}
             </p>
           </div>
-          {/* 右上：集切换 + 操作按钮 */}
           <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
             {currentProject.episodes
               .filter((e) => e.status !== "deleted")
@@ -303,7 +391,11 @@ export default function ProjectPage({
                   variant={currentEpisode?.id === ep.id ? "default" : "outline"}
                   size="sm"
                   className="h-7 text-xs gap-1"
-                  onClick={() => { setCurrentEpisode(ep); setAssembledPath(null); }}
+                  onClick={() => {
+                    setCurrentEpisode(ep);
+                    setAssembledPath(null);
+                    setMangaPath(null);
+                  }}
                 >
                   <Film className="size-3" />
                   第{ep.episodeNum}集
@@ -311,24 +403,38 @@ export default function ProjectPage({
                     variant={ep.status === "completed" ? "secondary" : "outline"}
                     className="text-[10px] px-1 py-0 ml-0.5"
                   >
-                    {ep.status === "completed" ? "✓" : ep.status === "generating" ? "…" : "草稿"}
+                    {ep.status === "completed"
+                      ? "✓"
+                      : ep.status === "generating"
+                        ? "…"
+                        : "草稿"}
                   </Badge>
                 </Button>
               ))}
 
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={handleCreateEpisode}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1"
+              onClick={handleCreateEpisode}
+            >
               <Plus className="size-3" />新集
             </Button>
 
-            {/* 删除当前集 */}
             {currentEpisode && (
               <AlertDialog>
-                <AlertDialogTrigger render={<button className="h-7 px-2 rounded-lg border border-border/50 flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive hover:border-destructive/40 hover:bg-destructive/10 transition-colors" />}>
+                <AlertDialogTrigger
+                  render={
+                    <button className="h-7 px-2 rounded-lg border border-border/50 flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive hover:border-destructive/40 hover:bg-destructive/10 transition-colors" />
+                  }
+                >
                   <Trash2 className="size-3" />删除集
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>删除第 {currentEpisode.episodeNum} 集？</AlertDialogTitle>
+                    <AlertDialogTitle>
+                      删除第 {currentEpisode.episodeNum} 集？
+                    </AlertDialogTitle>
                     <AlertDialogDescription>
                       将永久删除该集的所有分镜、首帧、视频和配音数据，此操作不可撤销。
                     </AlertDialogDescription>
@@ -347,16 +453,20 @@ export default function ProjectPage({
               </AlertDialog>
             )}
 
-            {/* 删除整个项目 */}
             <AlertDialog>
-              <AlertDialogTrigger render={<button className="h-7 px-2 rounded-lg border border-border/50 flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive hover:border-destructive/40 hover:bg-destructive/10 transition-colors" />}>
+              <AlertDialogTrigger
+                render={
+                  <button className="h-7 px-2 rounded-lg border border-border/50 flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive hover:border-destructive/40 hover:bg-destructive/10 transition-colors" />
+                }
+              >
                 <Trash2 className="size-3" />删除项目
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>删除整个项目？</AlertDialogTitle>
                   <AlertDialogDescription>
-                    将永久删除「{currentProject.title}」及其所有集数、角色、分镜和生成资产，此操作不可撤销。
+                    将永久删除「{currentProject.title}
+                    」及其所有集数、角色、分镜和生成资产，此操作不可撤销。
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -395,8 +505,10 @@ export default function ProjectPage({
             <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="font-semibold">世界观 & 角色卡</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">设定主角与配角，上传定妆照作为 AI 一致性锚点</p>
+                  <h3 className="font-semibold">世界观 & 数字演员库</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    上传定妆照作为 AI 一致性锚点，绑定所有后续画面
+                  </p>
                 </div>
                 <Button size="sm" onClick={() => setActiveStep(1)} className="gap-1.5">
                   下一步 <ChevronRight className="size-3.5" />
@@ -422,7 +534,9 @@ export default function ProjectPage({
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-semibold">剧本拆解</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">输入单集剧本，AI 自动拆解为 10~20 个分镜卡片</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    输入单集剧本，AI 自动拆解为 10~20 个分镜卡片（角色标签自动注入）
+                  </p>
                 </div>
               </div>
 
@@ -448,9 +562,15 @@ export default function ProjectPage({
                     disabled={generatingScript || !scriptInput.trim()}
                     className="gap-2 self-end"
                   >
-                    {generatingScript
-                      ? <><Loader2 className="size-4 animate-spin" />拆解中...</>
-                      : <><Sparkles className="size-4" />AI 拆解分镜</>}
+                    {generatingScript ? (
+                      <>
+                        <Loader2 className="size-4 animate-spin" />拆解中...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="size-4" />AI 拆解分镜
+                      </>
+                    )}
                   </Button>
                 </div>
               )}
@@ -469,7 +589,9 @@ export default function ProjectPage({
                         key={scene.id}
                         scene={scene}
                         index={i}
-                        onPromptChange={(sceneId, prompt) => updateScene(sceneId, { visualPrompt: prompt })}
+                        onPromptChange={(sceneId, prompt) =>
+                          updateScene(sceneId, { visualPrompt: prompt })
+                        }
                       />
                     ))}
                   </div>
@@ -484,7 +606,9 @@ export default function ProjectPage({
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-semibold">首帧抽卡</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">并发生成各分镜首帧，可单张重抽到满意为止</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    并发生成各分镜首帧，可单张重抽到满意为止
+                  </p>
                 </div>
                 <Button
                   size="sm"
@@ -492,16 +616,25 @@ export default function ProjectPage({
                   disabled={generatingImages || scenes.length === 0}
                   className="gap-1.5"
                 >
-                  {generatingImages
-                    ? <><Loader2 className="size-3.5 animate-spin" />生成中...</>
-                    : <><Sparkles className="size-3.5" />批量生成首帧</>}
+                  {generatingImages ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin" />生成中...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="size-3.5" />批量生成首帧
+                    </>
+                  )}
                 </Button>
               </div>
 
               {scenes.length > 0 && (
                 <>
                   <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                    <Progress value={(imagesDone / scenes.length) * 100} className="flex-1 h-1.5" />
+                    <Progress
+                      value={(imagesDone / scenes.length) * 100}
+                      className="flex-1 h-1.5"
+                    />
                     <span>{imagesDone}/{scenes.length} 完成</span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -511,11 +644,13 @@ export default function ProjectPage({
                         scene={scene}
                         index={i}
                         onRegenerateImage={(sceneId) => {
-                          axios.post("/api/generate/image", { sceneIds: [sceneId] }).then(() =>
-                            toast.success("重新生成中...")
-                          );
+                          axios
+                            .post("/api/generate/image", { sceneIds: [sceneId] })
+                            .then(() => toast.success("重新生成中..."));
                         }}
-                        onPromptChange={(sceneId, prompt) => updateScene(sceneId, { visualPrompt: prompt })}
+                        onPromptChange={(sceneId, prompt) =>
+                          updateScene(sceneId, { visualPrompt: prompt })
+                        }
                       />
                     ))}
                   </div>
@@ -524,37 +659,78 @@ export default function ProjectPage({
             </div>
           )}
 
-          {/* Step 3: 视频 & 配音 */}
+          {/* Step 3: 视频 & 三轨音频 */}
           {activeStep === 3 && (
             <div className="flex flex-col gap-4">
-              <h3 className="font-semibold">视频 & 配音</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <h3 className="font-semibold">动态引擎 & 三轨音频</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  图生视频（含质检重试）+ TTS 台词 + SFX 环境音效，三轨并行生成
+                </p>
+              </div>
+
+              {/* QA 警告横幅 */}
+              {qaFailed > 0 && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs">
+                  <span className="text-base">⚠️</span>
+                  <span>
+                    {qaFailed} 个分镜质检降级（系统已自动重试 3 次），可单独点击卡片重新生成
+                  </span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* 图生视频 */}
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-sm">图生视频（I2V）</CardTitle>
+                    <CardTitle className="text-sm flex items-center gap-1.5">
+                      <Film className="size-3.5 text-primary" />图生视频（I2V）
+                    </CardTitle>
                   </CardHeader>
                   <CardContent className="flex flex-col gap-3">
-                    <Progress value={(videosDone / Math.max(scenes.length, 1)) * 100} className="h-1.5" />
-                    <p className="text-xs text-muted-foreground">{videosDone}/{scenes.length} 个视频完成</p>
+                    <Progress
+                      value={(videosDone / Math.max(scenes.length, 1)) * 100}
+                      className="h-1.5"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {videosDone}/{scenes.length} 完成
+                      {qaFailed > 0 && (
+                        <span className="ml-1 text-amber-400">({qaFailed} 质检降级)</span>
+                      )}
+                    </p>
                     <Button
                       size="sm"
                       onClick={handleGenerateVideos}
                       disabled={generatingVideos || imagesDone === 0}
                       className="gap-1.5 w-full"
                     >
-                      {generatingVideos
-                        ? <><Loader2 className="size-3.5 animate-spin" />生成中...</>
-                        : <><Play className="size-3.5" />开始生成视频</>}
+                      {generatingVideos ? (
+                        <>
+                          <Loader2 className="size-3.5 animate-spin" />生成中...
+                        </>
+                      ) : (
+                        <>
+                          <Play className="size-3.5" />生成视频（含质检）
+                        </>
+                      )}
                     </Button>
                   </CardContent>
                 </Card>
+
+                {/* TTS 配音 */}
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-sm">TTS 配音</CardTitle>
+                    <CardTitle className="text-sm flex items-center gap-1.5">
+                      <Volume2 className="size-3.5 text-primary" />TTS 台词配音
+                    </CardTitle>
                   </CardHeader>
                   <CardContent className="flex flex-col gap-3">
+                    <Progress
+                      value={(audioDone / Math.max(scenes.length, 1)) * 100}
+                      className="h-1.5"
+                    />
                     <p className="text-xs text-muted-foreground">
-                      {scenes.filter((s) => s.localAudio).length}/{scenes.length} 个配音完成
+                      {audioDone}/{scenes.length} 完成
                     </p>
                     <Button
                       size="sm"
@@ -562,13 +738,55 @@ export default function ProjectPage({
                       disabled={generatingAudio}
                       className="gap-1.5 w-full"
                     >
-                      {generatingAudio
-                        ? <><Loader2 className="size-3.5 animate-spin" />生成中...</>
-                        : <><Sparkles className="size-3.5" />批量生成配音</>}
+                      {generatingAudio ? (
+                        <>
+                          <Loader2 className="size-3.5 animate-spin" />生成中...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="size-3.5" />批量生成配音
+                        </>
+                      )}
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                {/* SFX 环境音效 */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm flex items-center gap-1.5">
+                      <Music className="size-3.5 text-primary" />SFX 环境音效
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-3">
+                    <Progress
+                      value={(sfxDone / Math.max(scenes.length, 1)) * 100}
+                      className="h-1.5"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {sfxDone}/{scenes.length} 完成
+                    </p>
+                    <Button
+                      size="sm"
+                      onClick={handleGenerateSfx}
+                      disabled={generatingSfx}
+                      variant="outline"
+                      className="gap-1.5 w-full"
+                    >
+                      {generatingSfx ? (
+                        <>
+                          <Loader2 className="size-3.5 animate-spin" />生成中...
+                        </>
+                      ) : (
+                        <>
+                          <Music className="size-3.5" />生成环境音效
+                        </>
+                      )}
                     </Button>
                   </CardContent>
                 </Card>
               </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {scenes.map((scene, i) => (
                   <SceneCard
@@ -576,9 +794,9 @@ export default function ProjectPage({
                     scene={scene}
                     index={i}
                     onRegenerateVideo={(sceneId) => {
-                      axios.post("/api/generate/video", { sceneIds: [sceneId] }).then(() =>
-                        toast.success("视频重新生成中...")
-                      );
+                      axios
+                        .post("/api/generate/video", { sceneIds: [sceneId] })
+                        .then(() => toast.success("视频重新生成中..."));
                     }}
                   />
                 ))}
@@ -586,38 +804,116 @@ export default function ProjectPage({
             </div>
           )}
 
-          {/* Step 4: 时间线合成 */}
+          {/* Step 4: 时间线合成 & 多态导出 */}
           {activeStep === 4 && (
             <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold">时间线合成</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">调用本地 FFmpeg 拼接所有分镜，输出 MP4 成片</p>
-                </div>
-                <Button
-                  onClick={handleAssemble}
-                  disabled={assembling || scenes.filter((s) => s.localVideo || s.localImage).length === 0}
-                  className="gap-2"
-                >
-                  {assembling
-                    ? <><Loader2 className="size-4 animate-spin" />合成中...</>
-                    : <><Film className="size-4" />开始合成</>}
-                </Button>
+              <div>
+                <h3 className="font-semibold">时间线合成 & 多态导出</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  FFmpeg 智能对齐三轨音频，支持 16:9（横屏）/ 9:16（短剧竖屏）输出，一键导出漫剧长图
+                </p>
               </div>
 
+              {/* 资产统计 */}
               <Card>
-                <CardContent className="p-4 flex flex-col gap-2 text-xs text-muted-foreground">
-                  <div className="flex justify-between"><span>有首帧的分镜</span><span>{imagesDone} / {scenes.length}</span></div>
-                  <div className="flex justify-between"><span>有视频的分镜</span><span>{videosDone} / {scenes.length}</span></div>
-                  <div className="flex justify-between"><span>有配音的分镜</span><span>{scenes.filter((s) => s.localAudio).length} / {scenes.length}</span></div>
+                <CardContent className="p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-muted-foreground">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-foreground font-medium">{imagesDone}/{scenes.length}</span>
+                    <span>首帧</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-foreground font-medium">{videosDone}/{scenes.length}</span>
+                    <span>视频</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-foreground font-medium">{audioDone}/{scenes.length}</span>
+                    <span>TTS 配音</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-foreground font-medium">{sfxDone}/{scenes.length}</span>
+                    <span>SFX 音效</span>
+                  </div>
                 </CardContent>
               </Card>
 
+              {/* 导出格式选择 */}
+              <div className="flex flex-col gap-2">
+                <p className="text-sm font-medium">输出比例</p>
+                <div className="flex gap-2">
+                  {(["9:16", "16:9"] as const).map((r) => (
+                    <button
+                      key={r}
+                      onClick={() => setAspect(r)}
+                      className={`flex flex-col items-center gap-1 px-4 py-3 rounded-xl border transition-colors ${
+                        aspect === r
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border text-muted-foreground hover:border-border/80"
+                      }`}
+                    >
+                      <div
+                        className={`border-2 rounded-sm ${aspect === r ? "border-primary" : "border-muted-foreground"}`}
+                        style={
+                          r === "9:16"
+                            ? { width: 18, height: 32 }
+                            : { width: 32, height: 18 }
+                        }
+                      />
+                      <span className="text-xs font-mono">{r}</span>
+                      <span className="text-[10px] opacity-70">
+                        {r === "9:16" ? "短剧/抖音" : "横屏/B站"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 操作按钮组 */}
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  onClick={handleAssemble}
+                  disabled={
+                    assembling ||
+                    scenes.filter((s) => s.localVideo || s.localImage).length === 0
+                  }
+                  className="gap-2"
+                >
+                  {assembling ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />合成中...
+                    </>
+                  ) : (
+                    <>
+                      <Film className="size-4" />合成 MP4（{aspect}）
+                    </>
+                  )}
+                </Button>
+
+                <Button
+                  variant="outline"
+                  onClick={handleExportManga}
+                  disabled={exportingManga || imagesDone === 0}
+                  className="gap-2"
+                >
+                  {exportingManga ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />导出中...
+                    </>
+                  ) : (
+                    <>
+                      <BookImage className="size-4" />导出漫画长图
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {/* 合成结果 */}
               {assembledPath && (
                 <Card className="border-green-500/30 bg-green-500/5">
                   <CardContent className="p-4 flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-green-500">合成成功！</p>
+                      <p className="text-sm font-medium text-green-500">
+                        🎬 MP4 合成成功！
+                      </p>
                       <p className="text-xs text-muted-foreground">{assembledPath}</p>
                     </div>
                     <Button
@@ -631,6 +927,38 @@ export default function ProjectPage({
                   </CardContent>
                 </Card>
               )}
+
+              {/* 漫画导出结果 */}
+              {mangaPath && (
+                <Card className="border-purple-500/30 bg-purple-500/5">
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-purple-400">
+                        🖼️ 漫画长图导出成功！
+                      </p>
+                      <p className="text-xs text-muted-foreground">{mangaPath}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5"
+                        render={<a href={mangaPath} target="_blank" rel="noreferrer" />}
+                      >
+                        <Image className="size-3.5" />预览
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5"
+                        render={<a href={mangaPath} download />}
+                      >
+                        <Download className="size-3.5" />下载
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           )}
 
@@ -638,14 +966,16 @@ export default function ProjectPage({
           {activeStep === 5 && (
             <div className="flex flex-col gap-4">
               <div>
-                <h3 className="font-semibold">续集传承</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">基于本集摘要生成下一集剧情种子，保持角色记忆连贯性</p>
+                <h3 className="font-semibold">续集传承机制</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  基于本集摘要 + 角色档案生成下一集剧情种子，保持人物样貌与剧情 100% 连贯
+                </p>
               </div>
 
               {currentEpisode?.summary && (
                 <Card>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm">本集摘要</CardTitle>
+                    <CardTitle className="text-sm">本集剧情摘要</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <p className="text-sm text-muted-foreground">{currentEpisode.summary}</p>

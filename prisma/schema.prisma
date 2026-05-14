@@ -11,6 +11,7 @@ model Project {
   id         String      @id @default(uuid())
   title      String
   globalLore String
+  aspect     String      @default("16:9")
   createdAt  DateTime    @default(now())
   characters Character[]
   episodes   Episode[]
@@ -31,20 +32,28 @@ model Episode {
   episodeNum Int
   summary    String
   status     String  @default("draft")
+  outputPath String?
   scenes     Scene[]
   project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
 
 model Scene {
-  id           String  @id @default(uuid())
+  id           String @id @default(uuid())
   episodeId    String
   sceneOrder   Int
   visualPrompt String
   dialogue     String
   audioPrompt  String
-  localImage   String?
-  localVideo   String?
-  localAudio   String?
-  status       String  @default("pending")
-  episode      Episode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  localImage String?
+  localVideo String?
+  localAudio String?
+  localSfx   String?
+  localBgm   String?
+
+  qaStatus  String  @default("pending")
+  qaRetries Int     @default(0)
+
+  status  String  @default("pending")
+  episode Episode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
 }

@@ -12,7 +12,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { SceneData } from "@/stores/projectStore";
-import { cn } from "@/lib/utils";
 import {
   RefreshCw,
   Image as ImageIcon,
@@ -21,6 +20,9 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
+  Music,
+  ShieldCheck,
+  ShieldX,
 } from "lucide-react";
 
 const STATUS_CONFIG = {
@@ -45,7 +47,7 @@ const STATUS_CONFIG = {
 } as const;
 
 interface SceneCardProps {
-  scene: SceneData;
+  scene: SceneData & { localSfx?: string | null; qaStatus?: string; qaRetries?: number };
   index: number;
   onRegenerateImage?: (sceneId: string) => void;
   onRegenerateVideo?: (sceneId: string) => void;
@@ -59,7 +61,10 @@ export function SceneCard({
   onRegenerateVideo,
   onPromptChange,
 }: SceneCardProps) {
-  const statusCfg = STATUS_CONFIG[scene.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.pending;
+  const statusCfg =
+    STATUS_CONFIG[scene.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.pending;
+  const qaStatus = scene.qaStatus;
+  const hasSfx = !!(scene as any).localSfx;
 
   return (
     <Card className="overflow-hidden">
@@ -81,25 +86,36 @@ export function SceneCard({
           </div>
         )}
 
-        {scene.localVideo && (
-          <div className="absolute top-2 left-2">
-            <Badge variant="secondary" className="text-[10px] gap-1 px-1.5 py-0.5 bg-background/80 backdrop-blur-sm">
-              <Video className="size-2.5" />
-              视频
+        {/* 左上角：媒体资产标记 */}
+        <div className="absolute top-2 left-2 flex flex-col gap-1">
+          {scene.localVideo && (
+            <Badge
+              variant="secondary"
+              className="text-[10px] gap-1 px-1.5 py-0.5 bg-background/80 backdrop-blur-sm"
+            >
+              <Video className="size-2.5" />视频
             </Badge>
-          </div>
-        )}
-
-        {scene.localAudio && (
-          <div className="absolute top-2 left-2 mt-6">
-            <Badge variant="secondary" className="text-[10px] gap-1 px-1.5 py-0.5 bg-background/80 backdrop-blur-sm">
-              <Volume2 className="size-2.5" />
-              配音
+          )}
+          {scene.localAudio && (
+            <Badge
+              variant="secondary"
+              className="text-[10px] gap-1 px-1.5 py-0.5 bg-background/80 backdrop-blur-sm"
+            >
+              <Volume2 className="size-2.5" />配音
             </Badge>
-          </div>
-        )}
+          )}
+          {hasSfx && (
+            <Badge
+              variant="secondary"
+              className="text-[10px] gap-1 px-1.5 py-0.5 bg-background/80 backdrop-blur-sm"
+            >
+              <Music className="size-2.5" />音效
+            </Badge>
+          )}
+        </div>
 
-        <div className="absolute top-2 right-2 flex items-center gap-1">
+        {/* 右上角：状态 + QA 质检 */}
+        <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
           <Badge
             variant={statusCfg.color}
             className="text-[10px] gap-1 px-1.5 py-0.5 bg-background/80 backdrop-blur-sm"
@@ -107,8 +123,39 @@ export function SceneCard({
             {statusCfg.icon}
             {statusCfg.label}
           </Badge>
+
+          {/* QA 质检状态 */}
+          {qaStatus === "pass" && (
+            <Badge
+              variant="secondary"
+              className="text-[10px] gap-1 px-1.5 py-0.5 bg-green-500/15 text-green-400 border-green-500/30"
+            >
+              <ShieldCheck className="size-2.5" />质检通过
+            </Badge>
+          )}
+          {qaStatus === "qa_failed" && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span>
+                    <Badge
+                      variant="secondary"
+                      className="text-[10px] gap-1 px-1.5 py-0.5 bg-amber-500/15 text-amber-400 border-amber-500/30 cursor-help"
+                    >
+                      <ShieldX className="size-2.5" />质检降级
+                      {scene.qaRetries ? ` ×${scene.qaRetries}` : ""}
+                    </Badge>
+                  </span>
+                }
+              />
+              <TooltipContent side="left" className="text-xs max-w-44">
+                质检未通过（重试 {scene.qaRetries ?? 0} 次），已降级使用最后一次结果
+              </TooltipContent>
+            </Tooltip>
+          )}
         </div>
 
+        {/* 悬浮操作：重生成 */}
         <div className="absolute bottom-2 left-2 right-2 flex justify-between opacity-0 hover:opacity-100 transition-opacity">
           {onRegenerateImage && (
             <Tooltip>
@@ -127,6 +174,23 @@ export function SceneCard({
               <TooltipContent>重新生成首帧</TooltipContent>
             </Tooltip>
           )}
+          {onRegenerateVideo && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    size="icon"
+                    variant="secondary"
+                    className="size-7 bg-background/80 backdrop-blur-sm ml-auto"
+                    onClick={() => onRegenerateVideo(scene.id)}
+                  />
+                }
+              >
+                <RefreshCw className="size-3.5" />
+              </TooltipTrigger>
+              <TooltipContent>重新生成视频（含质检）</TooltipContent>
+            </Tooltip>
+          )}
         </div>
       </div>
 
@@ -134,7 +198,7 @@ export function SceneCard({
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium text-muted-foreground">镜头 {index + 1}</span>
           {scene.audioPrompt && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 max-w-32 truncate">
               {scene.audioPrompt}
             </Badge>
           )}
