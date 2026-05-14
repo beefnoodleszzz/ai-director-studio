@@ -312,31 +312,33 @@ function CreateProjectSheet({ onCreated }: { onCreated: (project: ProjectData) =
           </div>
         </div>
 
-        <SheetFooter className="px-6 pb-6 pt-4 border-t border-border/50 gap-2">
-          <Button
-            variant="outline"
-            className="flex-1"
-            onClick={() => setOpen(false)}
-          >
-            取消
-          </Button>
-          <Button
-            className="flex-1 gap-2"
-            onClick={handleCreate}
-            disabled={loading || !title.trim()}
-          >
-            {loading ? (
-              <>
-                <Loader2 className="size-4 animate-spin" />
-                创建中...
-              </>
-            ) : (
-              <>
-                <ChevronRight className="size-4" />
-                创建项目
-              </>
-            )}
-          </Button>
+        <SheetFooter className="px-6 pb-6 pt-4 border-t border-border/50">
+          <div className="flex flex-row gap-2 w-full">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setOpen(false)}
+            >
+              取消
+            </Button>
+            <Button
+              className="flex-1 gap-2"
+              onClick={handleCreate}
+              disabled={loading || !title.trim()}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  创建中...
+                </>
+              ) : (
+                <>
+                  <ChevronRight className="size-4" />
+                  创建项目
+                </>
+              )}
+            </Button>
+          </div>
         </SheetFooter>
       </SheetContent>
     </Sheet>
