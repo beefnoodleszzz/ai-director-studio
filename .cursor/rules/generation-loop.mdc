@@ -1,0 +1,54 @@
+---
+description: AI Director Studio 生成循环规范 — 所有生成必须有 Take + QA + 恢复机制
+alwaysApply: true
+---
+
+# 生成循环规范
+
+## 核心铁律：生成即 Take，Take 必须有评审
+
+所有调用 AI 接口的生成流程，无论是图像、视频还是音频，**必须**遵循以下循环：
+
+```
+生成参数快照 → 调用 Provider → 落盘资产 → 写入 Take 记录 → 自动 QA → 写入 Review
+```
+
+任何缺少 Take 记录的生成流程视为不合规。
+
+## 最低要求
+
+1. **Take 记录**：每次生成必须写入 `Take` 数据库记录，包含：
+   - `paramsSnapshot` — 完整 JSON 参数快照
+   - `promptSnapshot` — 实际发给 API 的 prompt
+   - `provider` — 使用的 provider 名称
+   - `generatedAt` / `generationMs` — 时间戳和耗时
+
+2. **QA 自动评审**：生成完成后必须进行 QA（至少基础文件大小检查），写入 `Review`：
+   - `verdict`: `"pass"` | `"warn"` | `"fail"`
+   - `score`: 0~1
+   - `failTags`: 失败原因标签数组
+
+3. **失败恢复**：通过 `GenerationTask.attempts` 跟踪重试次数，最多 `maxAttempts`（默认 3）次。
+
+## 多候选策略
+
+对于图像生成，必须生成 N 个 Take（默认 3），自动打分后采用最高分。
+
+```typescript
+// ✅ 正确：生成多候选
+for (let i = 0; i < nCandidates; i++) {
+  const take = await generateOneTake(shot);
+  const review = await qaImage(take);
+  await prisma.take.update({ where: { id: take.id }, data: { autoScore: review.score } });
+}
+// 自动采用最高分
+const best = await prisma.take.findFirst({ where: { shotId }, orderBy: { autoScore: "desc" } });
+```
+
+## 禁止"单次生成直接使用"
+
+❌ 禁止：
+```typescript
+const url = await callImageAPI(prompt);
+await prisma.shot.update({ data: { adoptedImageUrl: url } }); // ❌ 无 Take 记录
+```

@@ -1,47 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import type { SceneCard } from "@/types";
+/**
+ * @deprecated 使用 /api/generate/script 代替（已集成场次/镜头拆解）
+ * 保留此路由仅为兼容旧客户端调用
+ */
+import { NextResponse } from "next/server";
 
-export async function POST(req: NextRequest) {
-  try {
-    const { episodeId, scenes } = (await req.json()) as {
-      episodeId: string;
-      scenes: SceneCard[];
-    };
-
-    if (!episodeId || !scenes?.length) {
-      return NextResponse.json(
-        { error: "episodeId and scenes are required" },
-        { status: 400 }
-      );
-    }
-
-    const episode = await prisma.episode.findUnique({ where: { id: episodeId } });
-    if (!episode) {
-      return NextResponse.json({ error: "Episode not found" }, { status: 404 });
-    }
-
-    // 清除旧分镜，写入新分镜
-    await prisma.scene.deleteMany({ where: { episodeId } });
-
-    const created = await Promise.all(
-      scenes.map((s) =>
-        prisma.scene.create({
-          data: {
-            episodeId,
-            sceneOrder: s.sceneOrder,
-            visualPrompt: s.visualPrompt,
-            dialogue: s.dialogue,
-            audioPrompt: s.audioPrompt,
-            status: "pending",
-          },
-        })
-      )
-    );
-
-    return NextResponse.json({ status: "SUCCESS", scenes: created });
-  } catch (err) {
-    console.error("[scenes/batch-create]", err);
-    return NextResponse.json({ error: "Batch create failed" }, { status: 500 });
-  }
+export async function POST() {
+  return NextResponse.json(
+    { error: "This endpoint is deprecated. Use /api/generate/script instead." },
+    { status: 410 }
+  );
 }

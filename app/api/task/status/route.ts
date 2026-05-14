@@ -1,66 +1,42 @@
-import type { NextRequest } from "next/server";
-
-const taskRegistry = new Map<string, { progress: number; status: string; result?: string }>();
-
-export function registerTask(taskId: string) {
-  taskRegistry.set(taskId, { progress: 0, status: "pending" });
-}
-
-export function updateTaskProgress(taskId: string, progress: number, status: string, result?: string) {
-  taskRegistry.set(taskId, { progress, status, result });
-}
+import { NextRequest, NextResponse } from "next/server";
+import { getTaskStatus, getProjectTasks, getQueueStats, cancelTask } from "@/lib/task-queue";
 
 export async function GET(req: NextRequest) {
-  const taskId = req.nextUrl.searchParams.get("taskId");
+  try {
+    const { searchParams } = new URL(req.url);
+    const taskId = searchParams.get("taskId");
+    const projectId = searchParams.get("projectId");
 
-  if (!taskId) {
-    return new Response("taskId is required", { status: 400 });
+    if (taskId) {
+      const status = await getTaskStatus(taskId);
+      if (!status) return NextResponse.json({ error: "Task not found" }, { status: 404 });
+      return NextResponse.json(status);
+    }
+
+    if (projectId) {
+      const tasks = await getProjectTasks(projectId, 100);
+      const queueStats = getQueueStats();
+      return NextResponse.json({ tasks, queueStats });
+    }
+
+    const queueStats = getQueueStats();
+    return NextResponse.json({ queueStats });
+  } catch (err) {
+    console.error("[GET /api/task/status]", err);
+    return NextResponse.json({ error: "Failed" }, { status: 500 });
   }
+}
 
-  const stream = new ReadableStream({
-    start(controller) {
-      let attempts = 0;
-      const maxAttempts = 120;
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const taskId = searchParams.get("taskId");
+    if (!taskId) return NextResponse.json({ error: "taskId required" }, { status: 400 });
 
-      const send = (data: object) => {
-        controller.enqueue(`data: ${JSON.stringify(data)}\n\n`);
-      };
-
-      const timer = setInterval(() => {
-        attempts++;
-        const task = taskRegistry.get(taskId);
-
-        if (!task) {
-          send({ taskId, status: "pending", progress: 0, message: "Waiting..." });
-          if (attempts > 10) {
-            clearInterval(timer);
-            send({ taskId, status: "failed", progress: 0, message: "Task not found" });
-            controller.close();
-          }
-          return;
-        }
-
-        send({ taskId, ...task });
-
-        if (task.status === "completed" || task.status === "failed" || attempts >= maxAttempts) {
-          clearInterval(timer);
-          controller.close();
-        }
-      }, 2000);
-
-      req.signal.addEventListener("abort", () => {
-        clearInterval(timer);
-        try { controller.close(); } catch {}
-      });
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-      "X-Accel-Buffering": "no",
-    },
-  });
+    await cancelTask(taskId);
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    console.error("[DELETE /api/task/status]", err);
+    return NextResponse.json({ error: "Failed" }, { status: 500 });
+  }
 }

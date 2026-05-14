@@ -1,148 +1,83 @@
 # AI Director Studio
 
-> 本地全栈 AI 影视制作工作台 · v0.1.0
-
-面向开发者与创作者的本地 AI 短剧/漫剧生产线。采用「前端即桌面软件」思路，借助 SOTA 大模型集群，形成高连贯、高画质的本地化影视流水线。
+本地单机运行的 AI 短剧 / 漫剧生产工具。
 
 ---
 
-## 功能特性
+## 已实现能力
 
-- **六步成片向导**：世界观设定 → 剧本拆解 → 首帧生成 → 视频&配音 → FFmpeg 合成 → 续集传承
-- **多模型适配器**：DeepSeek（剧本）、字节即梦 Seedream（图像）、可灵/海螺（视频）、MiniMax（TTS）
-- **p-queue 限流**：并发数 ≤ 2，防止 API 封号
-- **本地 SQLite**：Prisma ORM，零服务端依赖，数据完全本地
-- **SSE 实时进度**：长任务异步轮询，不阻塞 HTTP
-- **暗色影院主题**：基于 Shadcn/ui nova + Tailwind CSS v4
+### 阶段 A — 可控生产骨架
+
+- **项目管理**：新建项目、选择类型（短剧/漫剧）、设置世界观与禁改规则
+- **风格圣经**：颜色风格、镜头语言、参考关键词持久化管理
+- **角色圣经**：完整角色档案（外观锚点、服装变体、声音档案、人际关系）
+- **角色资产上传**：多张参考图（定妆照/多角度/表情/服装变体）网格展示与管理
+- **剧本拆解**：AI 将剧本拆解为场次（Scene）+ 镜头（Shot）结构，支持发现新角色时中断确认
+- **持久化任务系统**：基于 SQLite 的 `GenerationTask` 表，重启后状态不丢；启动时清理中断任务（`running/retrying` → `failed`），`queued` 任务在服务器启动 2 秒后**自动恢复执行**（image / video / audio / sfx / assembly），已有 adopted take 则跳过，超出 `maxAttempts` 标记 failed
+
+### 阶段 B — 导演工作台
+
+- **镜头工作台**：每个镜头支持生成多个图像 Take，视图可切换（列表/时间线）
+- **Take 管理**：手动采用（adopt）、废弃（discard，持久化），多 Take 对比查看
+- **时间线视图**：横向时间轴显示镜头序号与审核状态，支持拖拽排序（持久化到 DB）
+- **批量生成**：按场次批量生成图片候选，支持仅重做失败镜头
+- **QA 面板**：按 verdict（通过/警告/失败）和 failTags 标签筛选，接受瑕疵持久化，批量重做
+- **任务中心**：生成任务状态追踪，失败/取消任务支持手动重试（重新入队）
+
+### 阶段 C — 质量飞轮
+
+- **Prompt 模板库**：结构化模板（风格前缀/角色锚点/动作/情绪/质量后缀），全局模板库支持跨项目克隆
+- **模板统计**：统计每个模板关联的通过率/废片率/平均重试次数
+- **Provider 基准**：按 provider 和 take 类型统计通过率、均分、耗时
+- **Provider 自动推荐**：基于历史数据推荐最优 provider，接入镜头工作台默认选项
+- **一致性报告**：基于标准 failTags 字典，统计每个角色跨集稳定性
+- **生产指标看板**：废片率/可用率/镜头进度/任务统计，快捷跳转到 QA/任务中心/一致性报告
+- **句级对白修正**：对白按句分割，支持行级编辑
+- **场次情绪曲线**：可视化折线图 + 预设快捷选择，持久化到 Scene.emotionArc
+
+### 阶段 D — 双模态产线
+
+- **短剧导出**：基于采用 Take 组装 MP4，支持 16:9 / 9:16
+- **漫剧导出**：多种网格模板（单格/双格/三格/动态五格等），气泡系统支持对白/旁白/拟声字/章节标题四种 SVG 样式
+- **导出历史**：manifest 追溯（episode/scene/shot/take 链路），支持内联展开查看
 
 ---
 
 ## 技术栈
 
-| 类别 | 选型 |
-|------|------|
-| 框架 | Next.js 15 App Router + TypeScript |
-| 包管理 | pnpm |
-| UI | Tailwind CSS v4 + Shadcn/ui |
+| 层 | 技术 |
+|---|---|
+| 框架 | Next.js 16 App Router |
+| 数据库 | SQLite + Prisma |
+| UI | Tailwind CSS v4 + shadcn/ui |
 | 状态 | Zustand |
-| 数据库 | SQLite + Prisma ORM 7 |
-| 任务队列 | p-queue（并发 2） |
-| 媒体处理 | FFmpeg + fluent-ffmpeg |
+| 媒体处理 | FFmpeg (视频组装) + Sharp (漫剧导出) |
+| AI 生成 | 可扩展 Provider 适配层 |
 
----
-
-## 环境准备
-
-### 1. 系统依赖
-
-需在本机安装 FFmpeg 并确保 PATH 中可用：
+## 本地运行
 
 ```bash
-# macOS
-brew install ffmpeg
-
-# Windows
-scoop install ffmpeg
-
-# 验证
-ffmpeg -version
-```
-
-### 2. Node.js / pnpm
-
-- Node.js >= 18
-- pnpm >= 8
-
-```bash
-npm install -g pnpm
-```
-
----
-
-## 安装与启动
-
-```bash
-# 1. 克隆项目
-git clone https://github.com/beefnoodleszzz/ai-director-studio.git
-cd ai-director-studio
-
-# 2. 安装依赖
 pnpm install
-
-# 3. 配置环境变量
-cp .env.local.example .env.local
-# 编辑 .env.local，填入你的 API Keys
-
-# 4. 初始化数据库
-npx prisma db push
-
-# 5. 启动开发服务器
+pnpm prisma db push
 pnpm dev
 ```
 
-访问 [http://localhost:3000](http://localhost:3000)
+访问 http://localhost:3000
 
 ---
 
-## 环境变量说明
-
-复制 `.env.local.example` 为 `.env.local` 后编辑：
-
-| 变量 | 说明 |
-|------|------|
-| `DATABASE_URL` | SQLite 路径，默认 `file:./dev.db` |
-| `DEEPSEEK_API_KEY` | DeepSeek API 密钥（剧本拆解） |
-| `DEEPSEEK_MODEL` | 模型名，默认 `deepseek-chat` |
-| `SEEDREAM_API_KEY` | 字节即梦密钥（首帧生成） |
-| `KLING_API_KEY` | 可灵密钥（图生视频） |
-| `HAILUO_API_KEY` | 海螺密钥（图生视频备选） |
-| `VIDEO_PROVIDER` | 视频提供商：`kling` 或 `hailuo` |
-| `TTS_API_KEY` | MiniMax 密钥（TTS 配音） |
-| `GENERATION_CONCURRENCY` | 并发数，默认 `2` |
-
----
-
-## 使用指南
-
-### 六步成片流程
-
-1. **世界观 & 角色**：新建项目，填写世界大纲，添加角色卡（名称+提示词+定妆照 URL）
-2. **剧本拆解**：创建第一集，粘贴剧本（500~2000字），AI 自动拆解为 10~20 个分镜
-3. **首帧抽卡**：批量生成各分镜首帧图，可单张重抽
-4. **视频 & 配音**：并发生成 I2V 视频 + TTS 配音
-5. **时间线合成**：FFmpeg 拼接所有分镜输出 MP4
-6. **续集传承**：AI 生成下一集剧情种子，保持人设连贯
-
-### 注意事项
-
-- 一集 20 个分镜请勿一次性全发，`p-queue` 默认限流为 **并发 2**
-- 图生视频属于异步长任务（数分钟），可在「视频 & 配音」步骤通过 SSE 轮询进度
-- 生成产物落盘于 `public/workspace/`，可直接通过 `/workspace/xxx.mp4` URL 访问
-
----
-
-## 项目结构
+## 目录结构
 
 ```
-├── app/
-│   ├── api/                    # API 路由
-│   │   ├── task/status/        # SSE 进度推送
-│   │   ├── generate/           # 各类生成接口
-│   │   └── projects/           # 项目 CRUD
-│   └── (studio)/               # 工作台页面
-├── components/studio/          # 核心业务组件
-├── lib/
-│   ├── models/                 # AI 模型适配器
-│   ├── ffmpeg.ts               # FFmpeg 封装
-│   ├── queue.ts                # p-queue 限流
-│   └── asset.ts                # 资源落盘
-├── stores/                     # Zustand 状态
-├── prisma/schema.prisma        # 数据库模型
-└── public/workspace/           # 生成产物目录
+app/
+  (studio)/projects/[id]/    # 项目工作台页面
+  api/                       # API 路由
+components/studio/           # 导演工作台 UI 组件
+lib/
+  workflows/                 # 生成工作流（image/video/audio/assembly）
+  manga/                     # 漫剧排版引擎（templates/layout/export）
+  qa-tags.ts                 # 标准 QA failTags 字典
+  task-queue.ts              # 持久化任务队列
+  provider-recommender.ts    # Provider 推荐算法
+prisma/schema.prisma         # 数据模型
 ```
-
----
-
-## License
-
-MIT

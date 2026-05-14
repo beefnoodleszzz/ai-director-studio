@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { useGenerationStore } from "@/stores/generationStore";
@@ -20,9 +20,17 @@ export function GenerationProgress({
   onComplete,
   onError,
 }: GenerationProgressProps) {
-  const { tasks, setTask, updateTask } = useGenerationStore();
+  const { tasks, updateTask } = useGenerationStore();
   const task = tasks[taskId];
   const esRef = useRef<EventSource | null>(null);
+  // 用 ref 缓存最新回调，避免每次回调引用变化都重建 SSE 连接
+  const onCompleteRef = useRef(onComplete);
+  const onErrorRef = useRef(onError);
+  // 在 effect 中更新 ref，避免在渲染期间写 ref.current
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+    onErrorRef.current = onError;
+  });
 
   useEffect(() => {
     if (esRef.current) esRef.current.close();
@@ -47,11 +55,11 @@ export function GenerationProgress({
       });
 
       if (data.status === "completed") {
-        onComplete?.(data.result);
+        onCompleteRef.current?.(data.result);
         es.close();
       }
       if (data.status === "failed") {
-        onError?.();
+        onErrorRef.current?.();
         es.close();
       }
     };
@@ -61,23 +69,25 @@ export function GenerationProgress({
     };
 
     return () => es.close();
-  }, [taskId]);
+  }, [taskId, updateTask]);
 
   if (!task) return null;
 
-  const statusIcon = {
+  const statusIconMap: Record<string, React.ReactNode> = {
     pending: <Clock className="size-3.5 text-muted-foreground" />,
     processing: <Loader2 className="size-3.5 text-primary animate-spin" />,
     completed: <CheckCircle2 className="size-3.5 text-green-500" />,
     failed: <XCircle className="size-3.5 text-destructive" />,
-  }[task.status];
+  };
+  const statusIcon = statusIconMap[task.status] ?? statusIconMap.pending;
 
-  const statusColor = {
+  const statusColorMap: Record<string, "default" | "secondary" | "destructive"> = {
     pending: "secondary",
     processing: "default",
     completed: "secondary",
     failed: "destructive",
-  } as const;
+  };
+  const statusColor = statusColorMap[task.status] ?? "secondary";
 
   return (
     <div className="flex flex-col gap-1.5 w-full">
@@ -86,7 +96,7 @@ export function GenerationProgress({
           {statusIcon}
           <span className="text-muted-foreground">{label ?? taskId.slice(0, 8)}</span>
         </div>
-        <Badge variant={statusColor[task.status]} className="text-[10px] px-1.5 py-0">
+        <Badge variant={statusColor} className="text-[10px] px-1.5 py-0">
           {task.progress}%
         </Badge>
       </div>

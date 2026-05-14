@@ -1,0 +1,47 @@
+---
+description: AI Director Studio 核心数据模型规范 — 实体字段约束与禁止事项
+alwaysApply: true
+---
+
+# 数据模型规范
+
+## 核心实体链
+```
+Project → Episode → Scene → Shot → Take
+```
+
+## 禁止直接在 Scene 存媒体路径
+
+❌ **错误做法**：
+```prisma
+model Scene {
+  localImage String?  // 禁止！
+  localVideo String?  // 禁止！
+}
+```
+
+✅ **正确做法**：媒体文件只存在 Take 中
+```prisma
+model Take {
+  localImage String?  // 只在 Take 存媒体路径
+  localVideo String?
+  localAudio String?
+}
+```
+
+## 每个 Shot 的生成结果必须作为 Take 记录
+
+- `Take.paramsSnapshot` — JSON 格式完整输入参数
+- `Take.promptSnapshot` — 实际使用的完整 prompt
+- `Take.isAdopted` — 当前是否被采用（1 个 Shot 只允许 1 个 isAdopted=true 的同类型 Take）
+- `Take.autoScore` — 0~1 自动评分，不可省略
+
+## CharacterBible 必须有锚点字段
+
+任何生成角色相关内容时，必须读取 `anchorFace` / `anchorHair` / `anchorWardrobe` 注入到 negative prompt 或 base prompt 中。
+
+## GenerationTask 状态机
+
+合法状态：`queued → running → retrying → paused → failed / completed / cancelled`
+
+不得跳过 `running` 直接设为 `completed`。

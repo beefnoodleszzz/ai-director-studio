@@ -1,57 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { ImageGenerator } from "@/lib/models/image";
-import { enqueue } from "@/lib/queue";
+import { generateShotImagesWithTask } from "@/lib/workflows/image-generation";
 
 export async function POST(req: NextRequest) {
   try {
-    const { episodeId, sceneIds, provider } = await req.json() as {
-      episodeId?: string;
-      sceneIds?: string[];
+    const body = (await req.json()) as {
+      projectId: string;
+      episodeId: string;
+      sceneId: string;
+      shotId: string;
+      prompt?: string;
+      refImageUrls?: string[];
       provider?: string;
+      candidateCount?: number;
     };
 
-    let targetSceneIds: string[] = [];
-
-    if (sceneIds && sceneIds.length > 0) {
-      targetSceneIds = sceneIds;
-    } else if (episodeId) {
-      const scenes = await prisma.scene.findMany({
-        where: { episodeId },
-        orderBy: { sceneOrder: "asc" },
-      });
-      targetSceneIds = scenes.map((s) => s.id);
-    } else {
-      return NextResponse.json({ error: "episodeId or sceneIds required" }, { status: 400 });
+    const { projectId, episodeId, sceneId, shotId } = body;
+    if (!projectId || !episodeId || !sceneId || !shotId) {
+      return NextResponse.json(
+        { error: "projectId, episodeId, sceneId, shotId are required" },
+        { status: 400 }
+      );
     }
 
-    const imageProvider = ImageGenerator.getProvider(provider);
+    const { taskId, result } = await generateShotImagesWithTask({
+      projectId,
+      episodeId,
+      sceneId,
+      shotId,
+      prompt: body.prompt ?? "",
+      refImageUrls: body.refImageUrls,
+      provider: body.provider,
+      candidateCount: body.candidateCount ?? 2,
+    });
 
-    const results = await Promise.all(
-      targetSceneIds.map((sceneId) =>
-        enqueue(async () => {
-          const scene = await prisma.scene.findUnique({ where: { id: sceneId } });
-          if (!scene) return { sceneId, error: "Scene not found" };
-
-          try {
-            await prisma.scene.update({ where: { id: sceneId }, data: { status: "generating" } });
-            const result = await imageProvider.generate(scene.visualPrompt);
-            await prisma.scene.update({
-              where: { id: sceneId },
-              data: { localImage: result.localPath, status: "image_done" },
-            });
-            return { sceneId, localPath: result.localPath, imageUrl: result.imageUrl };
-          } catch (err) {
-            await prisma.scene.update({ where: { id: sceneId }, data: { status: "error" } });
-            return { sceneId, error: String(err) };
-          }
-        })
-      )
-    );
-
-    return NextResponse.json({ results });
+    return NextResponse.json({ taskId, ...result });
   } catch (err) {
-    console.error("[generate/image]", err);
+    console.error("[api/generate/image]", err);
     return NextResponse.json({ error: "Image generation failed" }, { status: 500 });
   }
 }

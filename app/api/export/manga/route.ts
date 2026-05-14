@@ -1,133 +1,190 @@
 /**
- * 漫剧长图导出
- * 将每个分镜的图片 + 对话气泡拼接为小红书竖版长图（PNG）
- * 使用 sharp 进行服务端图片合成
+ * 漫剧导出 API
+ *
+ * 接收剧集 ID + 模板配置，使用漫剧模板系统渲染分页图片并合并为竖版长图。
+ * 导出结果写入 ExportRecord 并返回输出路径。
  */
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import path from "path";
 import fs from "fs";
+import { prisma } from "@/lib/prisma";
+import { paths, initExportDirs } from "@/lib/asset";
+import { MANGA_TEMPLATES } from "@/lib/manga/templates";
+import { assignShotsToPages } from "@/lib/manga/layout-engine";
+import { renderMangaPages, mergePagesToLongStrip } from "@/lib/manga/export";
+import type { ShotRenderData } from "@/lib/manga/layout-engine";
 
 export async function POST(req: NextRequest) {
   try {
-    const { episodeId } = (await req.json()) as { episodeId: string };
-    if (!episodeId) {
-      return NextResponse.json({ error: "episodeId required" }, { status: 400 });
+    const body = await req.json() as {
+      projectId: string;
+      episodeId: string;
+      templateId?: string;
+      shotsPerPage?: number;
+      pageWidth?: number;
+      pageHeight?: number;
+      quality?: number;
+      mergeLongStrip?: boolean;
+    };
+
+    const {
+      projectId,
+      episodeId,
+      templateId = "hero-plus-two",
+      pageWidth = 828,
+      pageHeight = 1472,
+      quality = 88,
+      mergeLongStrip = true,
+    } = body;
+
+    if (!projectId || !episodeId) {
+      return NextResponse.json({ error: "projectId and episodeId required" }, { status: 400 });
     }
 
+    // 确认剧集存在
     const episode = await prisma.episode.findUnique({
       where: { id: episodeId },
-      include: { scenes: { orderBy: { sceneOrder: "asc" } } },
+      include: {
+        scenes: {
+          orderBy: { sceneOrder: "asc" },
+          include: {
+            shots: {
+              orderBy: { shotOrder: "asc" },
+              include: {
+                takes: {
+                  where: { takeType: "image", isAdopted: true },
+                  take: 1,
+                },
+              },
+            },
+          },
+        },
+        project: {
+          include: { characters: { select: { id: true, name: true } } },
+        },
+      },
     });
+
     if (!episode) {
       return NextResponse.json({ error: "Episode not found" }, { status: 404 });
     }
 
-    // 懒加载 sharp（不影响其他路由的冷启动）
-    let sharp: typeof import("sharp");
-    try {
-      sharp = (await import("sharp")).default as unknown as typeof import("sharp");
-    } catch {
-      return NextResponse.json(
-        {
-          error:
-            "sharp is not installed. Run: pnpm add sharp",
-        },
-        { status: 500 }
-      );
-    }
+    // 构建角色 ID → 名字映射
+    const charMap = new Map(episode.project.characters.map((c) => [c.id, c.name]));
 
-    const WIDTH = 1080;
-    const FRAME_HEIGHT = 1080; // 每帧高度（正方形）
-    const BUBBLE_HEIGHT = 160;  // 对话气泡区域高度
-    const CARD_HEIGHT = FRAME_HEIGHT + BUBBLE_HEIGHT;
+    // 收集所有有采用 take 的镜头
+    const shotDataList: ShotRenderData[] = [];
 
-    const scenes = episode.scenes.filter((s) => s.localImage);
-    if (scenes.length === 0) {
-      return NextResponse.json({ error: "No scenes with images" }, { status: 400 });
-    }
+    for (const scene of episode.scenes) {
+      for (const shot of scene.shots) {
+        const adoptedTake = shot.takes[0];
+        if (!adoptedTake?.localImage) continue;
 
-    const totalHeight = CARD_HEIGHT * scenes.length;
+        // 从 URL 转换为绝对路径
+        const imagePath = path.join(
+          process.cwd(),
+          "public",
+          adoptedTake.localImage.startsWith("/") ? adoptedTake.localImage.slice(1) : adoptedTake.localImage
+        );
 
-    // 创建白色底版
-    const canvas = sharp({
-      create: { width: WIDTH, height: totalHeight, channels: 4, background: "#0a0a0f" },
-    });
+        // 取第一个主体角色名
+        const subjectIds: string[] = shot.subjectCharIds
+          ? JSON.parse(shot.subjectCharIds)
+          : [];
+        const characterName = charMap.get(subjectIds[0]) ?? "";
 
-    const compositeInputs: import("sharp").OverlayOptions[] = [];
-
-    for (let i = 0; i < scenes.length; i++) {
-      const scene = scenes[i];
-      const yOffset = i * CARD_HEIGHT;
-
-      if (scene.localImage) {
-        const imgAbsPath = path.join(process.cwd(), "public", scene.localImage);
-        if (fs.existsSync(imgAbsPath)) {
-          const resized = await sharp(imgAbsPath)
-            .resize(WIDTH, FRAME_HEIGHT, { fit: "cover" })
-            .toBuffer();
-          compositeInputs.push({ input: resized, top: yOffset, left: 0 });
-        }
-      }
-
-      // 对话气泡：SVG 文字层
-      if (scene.dialogue) {
-        const truncated = scene.dialogue.length > 60
-          ? scene.dialogue.slice(0, 57) + "…"
-          : scene.dialogue;
-        const svgText = `
-          <svg width="${WIDTH}" height="${BUBBLE_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
-            <rect width="${WIDTH}" height="${BUBBLE_HEIGHT}" fill="#0a0a0f" opacity="0.9"/>
-            <text 
-              x="50%" y="50%" 
-              dominant-baseline="middle" text-anchor="middle"
-              font-family="PingFang SC, Noto Sans CJK SC, sans-serif"
-              font-size="32" fill="#FFFAF0" 
-              xml:space="preserve"
-            >${escapeXml(truncated)}</text>
-          </svg>`;
-        compositeInputs.push({
-          input: Buffer.from(svgText),
-          top: yOffset + FRAME_HEIGHT,
-          left: 0,
+        shotDataList.push({
+          shotId: shot.id,
+          imagePath,
+          dialogue: shot.dialogue ?? "",
+          characterName,
+          shotType: shot.shotType ?? "",
+          isEmphasis: shot.shotType === "ECU" || shot.shotType === "LS" || shot.shotType === "ELS",
         });
       }
-
-      // 镜头编号角标
-      const indexSvg = `
-        <svg width="80" height="36" xmlns="http://www.w3.org/2000/svg">
-          <rect width="80" height="36" rx="6" fill="#c0a060" opacity="0.9"/>
-          <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle"
-            font-family="monospace" font-size="18" fill="#0a0a0f" font-weight="bold"
-          >#${String(i + 1).padStart(2, "0")}</text>
-        </svg>`;
-      compositeInputs.push({
-        input: Buffer.from(indexSvg),
-        top: yOffset + 12,
-        left: 12,
-      });
     }
 
-    const outputDir = path.join(process.cwd(), "public", "workspace", "output");
-    fs.mkdirSync(outputDir, { recursive: true });
-    const filename = `manga_${episodeId}_${Date.now()}.png`;
-    const outputPath = path.join(outputDir, filename);
-    const publicPath = `/workspace/output/${filename}`;
+    if (shotDataList.length === 0) {
+      return NextResponse.json({ error: "No adopted image takes found for this episode" }, { status: 422 });
+    }
 
-    await canvas.composite(compositeInputs).png({ compressionLevel: 6 }).toFile(outputPath);
+    // 初始化导出目录
+    initExportDirs(projectId, episodeId);
+    const exportDir = paths.exports(projectId, episodeId);
+    const timestamp = Date.now();
+    const pageOutputDir = path.join(exportDir, `manga-${timestamp}`);
 
-    return NextResponse.json({ outputPath: publicPath });
-  } catch (err) {
-    console.error("[export/manga]", err);
-    return NextResponse.json({ error: "Manga export failed" }, { status: 500 });
+    // 布局分配
+    const pages = assignShotsToPages(shotDataList, templateId, pageWidth);
+
+    // 渲染所有页
+    const pageResults = await renderMangaPages(pages, {
+      outputDir: pageOutputDir,
+      pageWidth,
+      pageHeight,
+      quality,
+    });
+
+    // 合并为长图
+    let longStripPath: string | null = null;
+    if (mergeLongStrip && pageResults.length > 0) {
+      longStripPath = path.join(exportDir, `manga-${timestamp}-longstrip.jpg`);
+      await mergePagesToLongStrip(pageResults, longStripPath, quality);
+    }
+
+    const relativeLongStripPath = longStripPath
+      ? "/" + path.relative(path.join(process.cwd(), "public"), longStripPath).replace(/\\/g, "/")
+      : null;
+
+    // manifest
+    const manifest = {
+      type: "manga",
+      templateId,
+      episodeId,
+      totalPages: pageResults.length,
+      totalShots: shotDataList.length,
+      pageWidth,
+      pageHeight,
+      longStripPath: relativeLongStripPath,
+      pages: pageResults.map((p) => ({
+        pageIndex: p.pageIndex,
+        path: "/" + path.relative(path.join(process.cwd(), "public"), p.outputPath).replace(/\\/g, "/"),
+      })),
+    };
+
+    const manifestPath = path.join(pageOutputDir, "manifest.json");
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+    const relativeManifestPath = "/" + path.relative(path.join(process.cwd(), "public"), manifestPath).replace(/\\/g, "/");
+
+    // 写入 ExportRecord
+    const record = await prisma.exportRecord.create({
+      data: {
+        projectId,
+        episodeId,
+        exportType: "manga",
+        status: "completed",
+        outputPath: relativeLongStripPath ?? "",
+        manifestPath: relativeManifestPath,
+        totalShots: shotDataList.length,
+        duration: 0,
+        exportedAt: new Date(),
+      },
+    });
+
+    return NextResponse.json({
+      ok: true,
+      exportRecordId: record.id,
+      totalPages: pageResults.length,
+      totalShots: shotDataList.length,
+      longStripUrl: relativeLongStripPath,
+      manifestUrl: relativeManifestPath,
+    });
+  } catch (e) {
+    console.error("[manga-export]", e);
+    return NextResponse.json({ error: String(e) }, { status: 500 });
   }
 }
 
-function escapeXml(s: string) {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
+export async function GET() {
+  return NextResponse.json({ templates: MANGA_TEMPLATES });
 }

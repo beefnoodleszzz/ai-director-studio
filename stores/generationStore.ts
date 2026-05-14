@@ -1,7 +1,14 @@
 "use client";
 
 import { create } from "zustand";
-import type { TaskStatus } from "@/types";
+type TaskStatus = {
+  taskId: string;
+  type: string;
+  status: "pending" | "processing" | "completed" | "failed";
+  progress: number;
+  message?: string;
+  result?: string;
+};
 
 interface GenerationStore {
   tasks: Record<string, TaskStatus>;
@@ -37,7 +44,8 @@ export const useGenerationStore = create<GenerationStore>((set) => ({
 
   removeTask: (taskId) =>
     set((state) => {
-      const { [taskId]: _, ...rest } = state.tasks;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { [taskId]: _removed, ...rest } = state.tasks;
       return { tasks: rest };
     }),
 

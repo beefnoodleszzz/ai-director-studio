@@ -1,3 +1,27 @@
+/**
+ * 全局共享类型定义
+ * 注意：业务 DTO 请放在各 workflow 的 types.ts 中
+ */
+
+export interface GenerateImageResult {
+  imageUrl: string;
+  localPath?: string;
+}
+
+export interface VideoTaskResult {
+  taskId: string;
+  status: "submitted" | "processing" | "completed" | "failed";
+  progress: number;
+  videoUrl?: string;
+  localPath?: string;
+}
+
+export interface AudioResult {
+  audioUrl: string;
+  localPath?: string;
+}
+
+// 保留兼容旧 models/text.ts 的引用
 export interface SceneCard {
   sceneOrder: number;
   visualPrompt: string;
@@ -21,30 +45,3 @@ export interface ScriptBreakdownResult {
   scenes: SceneCard[];
   episodeSummary: string;
 }
-
-export interface GenerateImageResult {
-  imageUrl: string;
-  localPath?: string;
-}
-
-export interface VideoTaskResult {
-  taskId: string;
-  status: "submitted" | "processing" | "completed" | "failed";
-  progress: number;
-  videoUrl?: string;
-  localPath?: string;
-}
-
-export interface AudioResult {
-  audioUrl: string;
-  localPath?: string;
-}
-
-export type TaskStatus = {
-  taskId: string;
-  type: "image" | "video" | "audio" | "assemble";
-  status: "pending" | "processing" | "completed" | "failed";
-  progress: number;
-  message?: string;
-  result?: string;
-};

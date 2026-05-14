@@ -10,14 +10,27 @@ export async function GET(
     const project = await prisma.project.findUnique({
       where: { id },
       include: {
-        characters: true,
+        styleBible: true,
+        characters: {
+          include: { voiceProfile: true, assets: true },
+          orderBy: { createdAt: "asc" },
+        },
         episodes: {
           orderBy: { episodeNum: "asc" },
-          include: { scenes: { orderBy: { sceneOrder: "asc" } } },
+          include: {
+            scenes: {
+              orderBy: { sceneOrder: "asc" },
+              include: {
+                shots: {
+                  orderBy: { shotOrder: "asc" },
+                  include: { takes: { orderBy: { createdAt: "desc" } } },
+                },
+              },
+            },
+          },
         },
       },
     });
-
     if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json(project);
   } catch (err) {
@@ -32,12 +45,17 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const body = await req.json() as { title?: string; globalLore?: string };
-    const project = await prisma.project.update({
-      where: { id },
-      data: body,
-      include: { characters: true, episodes: true },
-    });
+    const body = (await req.json()) as Partial<{
+      title: string;
+      type: string;
+      aspect: string;
+      platform: string;
+      worldSetting: string;
+      era: string;
+      forbidRules: string;
+    }>;
+
+    const project = await prisma.project.update({ where: { id }, data: body });
     return NextResponse.json(project);
   } catch (err) {
     console.error("[PATCH /api/projects/:id]", err);

@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { initProjectDirs } from "@/lib/asset";
 
 export async function GET() {
   try {
     const projects = await prisma.project.findMany({
       orderBy: { createdAt: "desc" },
       include: {
-        characters: true,
-        episodes: { orderBy: { episodeNum: "asc" } },
+        characters: { select: { id: true, name: true } },
+        episodes: { orderBy: { episodeNum: "asc" }, select: { id: true, episodeNum: true, title: true, status: true } },
+        styleBible: { select: { id: true, genreTag: true, visualStyle: true } },
       },
     });
     return NextResponse.json(projects);
@@ -19,16 +21,33 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { title, globalLore } = await req.json() as { title: string; globalLore: string };
+    const body = (await req.json()) as {
+      title: string;
+      type?: string;
+      aspect?: string;
+      platform?: string;
+      worldSetting?: string;
+      era?: string;
+    };
 
-    if (!title) {
+    if (!body.title) {
       return NextResponse.json({ error: "title is required" }, { status: 400 });
     }
 
     const project = await prisma.project.create({
-      data: { title, globalLore: globalLore ?? "" },
-      include: { characters: true, episodes: true },
+      data: {
+        title: body.title,
+        type: body.type ?? "short-drama",
+        aspect: body.aspect ?? "9:16",
+        platform: body.platform ?? "",
+        worldSetting: body.worldSetting ?? "",
+        era: body.era ?? "",
+        styleBible: { create: {} },
+      },
+      include: { styleBible: true, characters: true, episodes: true },
     });
+
+    initProjectDirs(project.id);
 
     return NextResponse.json(project, { status: 201 });
   } catch (err) {

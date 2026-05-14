@@ -10,11 +10,12 @@ const globalForPrisma = globalThis as unknown as {
 function createPrismaClient(): PrismaClient {
   const rawUrl = process.env.DATABASE_URL ?? "file:./public/workspace/database.db";
   const dbUrl = rawUrl.startsWith("file:./")
-    ? `file:${path.join(process.cwd(), rawUrl.slice(7))}`
+    // turbopackIgnore: true — 动态路径拼接仅在 Node.js 运行时执行，不应被静态追踪
+    ? `file:${path.join(/*turbopackIgnore: true*/ process.cwd(), rawUrl.slice(7))}`
     : rawUrl;
 
   const dir = path.dirname(dbUrl.replace("file:", ""));
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  if (!fs.existsSync(/*turbopackIgnore: true*/ dir)) fs.mkdirSync(dir, { recursive: true });
 
   const adapter = new PrismaLibSql({ url: dbUrl });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

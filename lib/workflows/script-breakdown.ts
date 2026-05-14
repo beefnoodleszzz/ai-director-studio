@@ -1,0 +1,244 @@
+/**
+ * 剧本拆解 Workflow
+ *
+ * 职责：
+ * 1. 调用 LLM 将剧本拆解为 场次 → 镜头 结构
+ * 2. 检测新重要角色，触发拦截（返回 NEED_CHARACTER_SETUP）
+ * 3. 将场次/镜头写入数据库（Scene → Shot）
+ * 4. 更新剧集摘要/hook/cliffhanger
+ */
+
+import axios from "axios";
+import { prisma } from "@/lib/prisma";
+import { enqueueTask } from "@/lib/task-queue";
+import type { ScriptBreakdownResult } from "./types";
+
+// ─── LLM 调用 ─────────────────────────────────────────────────────────────────
+
+async function callLLM(systemPrompt: string, userPrompt: string): Promise<string> {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  const baseUrl = process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com/v1";
+  const model = process.env.DEEPSEEK_MODEL ?? "deepseek-chat";
+
+  if (!apiKey) throw new Error("DEEPSEEK_API_KEY is not configured");
+
+  const response = await axios.post(
+    `${baseUrl}/chat/completions`,
+    { model, messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }], temperature: 0.7 },
+    {
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      timeout: 120_000,
+    }
+  );
+
+  return response.data.choices[0].message.content as string;
+}
+
+// ─── LLM Prompt ───────────────────────────────────────────────────────────────
+
+function buildSystemPrompt(existingCharNames: string): string {
+  return `你是顶级商业短剧分镜师与角色导演。请将用户提供的剧本拆解为场次和镜头，严格输出 JSON，不包含任何其他文字或 markdown 标记。
+
+【已有角色库】：${existingCharNames || "（暂无）"}
+
+【JSON 格式】：
+{
+  "episodeSummary": "本集100字内摘要",
+  "hook": "本集开场吸引点",
+  "cliffhanger": "结尾悬念",
+  "newCharacters": [
+    { "name": "角色姓名", "description": "详细外貌+性格（中文）" }
+  ],
+  "scenes": [
+    {
+      "sceneOrder": 1,
+      "location": "地点名称",
+      "timeOfDay": "day|night|dawn|dusk",
+      "timePeriod": "时间段描述",
+      "characterNames": ["角色1", "角色2"],
+      "plotPurpose": "场次剧情目的",
+      "emotionArc": "情绪升级描述",
+      "summary": "场次摘要",
+      "shots": [
+        {
+          "shotOrder": 1,
+          "shotType": "ECU|CU|MCU|MS|FS|LS|ELS",
+          "cameraAngle": "eye|low|high|bird|dutch",
+          "cameraMotion": "static|pan|tilt|dolly|handheld|zoom",
+          "durationSecs": 3.0,
+          "actionDesc": "行为描述（中文）",
+          "narrativePurpose": "叙事目的",
+          "emotionGoal": "情绪目标",
+          "visualPrompt": "English cinematic prompt for image generation, detailed",
+          "audioPrompt": "音效情绪标注[冷笑][雨声]",
+          "dialogue": "角色台词原文"
+        }
+      ]
+    }
+  ]
+}
+
+提取新角色规则：
+- 有名字、有台词、对剧情有推进作用 → 放入 newCharacters
+- 路人甲、保安、服务员、群众 → 不提取，在 visualPrompt 中泛化描述`;
+}
+
+// ─── 主入口 ───────────────────────────────────────────────────────────────────
+
+export interface BreakdownScriptInput {
+  projectId: string;
+  episodeId: string;
+  script: string;
+}
+
+export type BreakdownScriptResult =
+  | { status: "NEED_CHARACTER_SETUP"; newCharacters: ScriptBreakdownResult["newCharacters"]; pendingData: ScriptBreakdownResult }
+  | { status: "SUCCESS"; sceneCount: number; shotCount: number };
+
+export async function breakdownScript(input: BreakdownScriptInput): Promise<BreakdownScriptResult> {
+  const { episodeId, script } = input;
+
+  const episode = await prisma.episode.findUnique({
+    where: { id: episodeId },
+    include: {
+      project: {
+        include: { characters: true, styleBible: true },
+      },
+    },
+  });
+  if (!episode) throw new Error(`Episode ${episodeId} not found`);
+
+  const existingCharNames = episode.project.characters.map((c) => c.name).join("、");
+  const characterList = episode.project.characters
+    .map((c) => `- ${c.name}: ${c.basePrompt}`)
+    .join("\n");
+
+  const systemPrompt = buildSystemPrompt(existingCharNames);
+  const userPrompt = `世界观：${episode.project.worldSetting}\n\n已有角色：\n${characterList}\n\n剧本：\n${script}`;
+
+  const raw = await callLLM(systemPrompt, userPrompt);
+  const jsonStr = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+  const parsed = JSON.parse(jsonStr) as ScriptBreakdownResult;
+
+  if (!parsed.newCharacters) parsed.newCharacters = [];
+
+  // 角色拦截
+  if (parsed.newCharacters.length > 0) {
+    await prisma.episode.update({
+      where: { id: episodeId },
+      data: { summary: parsed.episodeSummary, hook: parsed.hook, cliffhanger: parsed.cliffhanger },
+    });
+    return { status: "NEED_CHARACTER_SETUP", newCharacters: parsed.newCharacters, pendingData: parsed };
+  }
+
+  // 正式落库
+  await commitScenesAndShots(episodeId, parsed);
+
+  const totalShots = parsed.scenes.reduce((acc, s) => acc + (s.shots?.length ?? 0), 0);
+  return { status: "SUCCESS", sceneCount: parsed.scenes.length, shotCount: totalShots };
+}
+
+// ─── 角色就绪后恢复落库 ───────────────────────────────────────────────────────
+
+export async function commitPendingBreakdown(
+  episodeId: string,
+  pendingData: ScriptBreakdownResult
+): Promise<{ sceneCount: number; shotCount: number }> {
+  await commitScenesAndShots(episodeId, pendingData);
+  const totalShots = pendingData.scenes.reduce((acc, s) => acc + (s.shots?.length ?? 0), 0);
+  return { sceneCount: pendingData.scenes.length, shotCount: totalShots };
+}
+
+// ─── 内部：写场次和镜头 ───────────────────────────────────────────────────────
+
+async function commitScenesAndShots(episodeId: string, data: ScriptBreakdownResult) {
+  await prisma.episode.update({
+    where: { id: episodeId },
+    data: {
+      summary: data.episodeSummary,
+      hook: data.hook,
+      cliffhanger: data.cliffhanger,
+      status: "in-progress",
+    },
+  });
+
+  // 清除旧场次（及其镜头，通过 cascade）
+  await prisma.scene.deleteMany({ where: { episodeId } });
+
+  for (const sceneData of data.scenes) {
+    const scene = await prisma.scene.create({
+      data: {
+        episodeId,
+        sceneOrder: sceneData.sceneOrder,
+        location: sceneData.location ?? "",
+        timeOfDay: sceneData.timeOfDay ?? "",
+        timePeriod: sceneData.timePeriod ?? "",
+        characters: JSON.stringify(sceneData.characterNames ?? []),
+        plotPurpose: sceneData.plotPurpose ?? "",
+        emotionArc: sceneData.emotionArc ?? "",
+        summary: sceneData.summary ?? "",
+        status: "pending",
+      },
+    });
+
+    if (sceneData.shots && sceneData.shots.length > 0) {
+      for (const shotData of sceneData.shots) {
+        await prisma.shot.create({
+          data: {
+            sceneId: scene.id,
+            shotOrder: shotData.shotOrder,
+            shotType: shotData.shotType ?? "",
+            cameraAngle: shotData.cameraAngle ?? "",
+            cameraMotion: shotData.cameraMotion ?? "",
+            durationSecs: shotData.durationSecs ?? 3,
+            actionDesc: shotData.actionDesc ?? "",
+            narrativePurpose: shotData.narrativePurpose ?? "",
+            emotionGoal: shotData.emotionGoal ?? "",
+            visualPrompt: shotData.visualPrompt ?? "",
+            audioPrompt: shotData.audioPrompt ?? "",
+            dialogue: shotData.dialogue ?? "",
+            readiness: "ready",
+            status: "pending",
+          },
+        });
+      }
+    }
+  }
+}
+
+// ─── 含任务追踪的包装入口 ─────────────────────────────────────────────────────
+
+export async function breakdownScriptWithTask(input: BreakdownScriptInput): Promise<BreakdownScriptResult> {
+  const { taskId, result } = await enqueueTask(
+    {
+      projectId: input.projectId,
+      taskType: "script-breakdown",
+      inputRef: { episodeId: input.episodeId },
+    },
+    () => breakdownScript(input)
+  );
+  void taskId;
+  return result;
+}
+
+// ─── 下一集 seed ──────────────────────────────────────────────────────────────
+
+export async function generateNextEpisodeSeed(
+  projectId: string,
+  prevEpisodeId: string
+): Promise<string> {
+  const episode = await prisma.episode.findUnique({
+    where: { id: prevEpisodeId },
+    include: { project: { include: { characters: true } } },
+  });
+  if (!episode) throw new Error("Episode not found");
+
+  const characterList = episode.project.characters
+    .map((c) => `- ${c.name}: ${c.basePrompt}`)
+    .join("\n");
+
+  return callLLM(
+    "你是影视编剧助手，根据上一集摘要和角色设定，生成下一集的剧情走向提示（200字以内）。",
+    `世界观：${episode.project.worldSetting}\n\n角色：\n${characterList}\n\n上一集摘要：${episode.summary}\n\n结尾悬念：${episode.cliffhanger}`
+  );
+}

@@ -1,0 +1,48 @@
+---
+description: AI Director Studio Workflow 架构规范 — 业务编排只在 lib/workflows/
+globs: app/api/**/*.ts
+alwaysApply: false
+---
+
+# Workflow 架构规范
+
+## 核心原则：API 路由只做入口，不做业务
+
+✅ **正确**：路由只验证参数 + 调用 workflow
+```typescript
+// app/api/generate/image/route.ts
+export async function POST(req: NextRequest) {
+  const { shotId, ...opts } = await req.json();
+  if (!shotId) return NextResponse.json({ error: "..." }, { status: 400 });
+  const result = await generateShotImagesWithTask({ shotId, ...opts });
+  return NextResponse.json(result);
+}
+```
+
+❌ **错误**：路由内包含业务逻辑
+```typescript
+// 禁止在路由内直接调用 prisma、ffmpeg、AI SDK
+export async function POST(req: NextRequest) {
+  const scene = await prisma.scene.findUnique(...); // ❌
+  const result = await axios.post("https://api.kling.ai/..."); // ❌
+}
+```
+
+## Workflow 文件规范
+
+所有业务逻辑必须放在 `lib/workflows/` 下：
+- `script-breakdown.ts` — 剧本拆解
+- `image-generation.ts` — 图像生成
+- `video-generation.ts` — 视频生成
+- `audio-generation.ts` — 音频/TTS 生成
+- `assembly.ts` — FFmpeg 合成
+
+每个 workflow 主入口函数必须有一个 `WithTask` 后缀的包装版本（使用 `enqueueTask`）。
+
+## 依赖方向
+
+```
+app/api/ → lib/workflows/ → lib/task-queue + lib/asset + lib/prisma
+```
+
+lib/workflows/ **不得** 导入 `next/server`。

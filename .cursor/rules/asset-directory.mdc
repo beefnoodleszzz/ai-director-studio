@@ -1,0 +1,51 @@
+---
+description: AI Director Studio 媒体资产落盘路径规范
+globs: lib/**/*.ts
+alwaysApply: false
+---
+
+# 资产路径规范
+
+## 标准目录结构
+
+```
+public/workspace/projects/{projectId}/
+  style-bible.json
+  characters/{characterId}/
+    bible.json
+    refs/        — 定妆参考图
+    angles/      — 多角度图
+    expressions/ — 表情图
+    wardrobe/    — 服装变体
+  episodes/{episodeId}/
+    episode.json
+    scenes/{sceneId}/
+      shots/{shotId}/
+        takes/{takeId}/
+          input.json    — 输入参数快照（必须写入）
+          review.json   — QA 评审结果（有评审时写入）
+          image.jpg
+          video.mp4
+          audio.mp3
+          sfx.mp3
+    exports/    — 成片导出
+  cache/
+  temp/
+```
+
+## 使用 lib/asset.ts 中的函数
+
+❌ 禁止手动拼接路径：
+```typescript
+const dir = `public/workspace/${projectId}/...`; // ❌
+```
+
+✅ 使用 paths 对象：
+```typescript
+import { paths, downloadToTake, saveBase64ToTake } from "@/lib/asset";
+const dir = paths.take(projectId, episodeId, sceneId, shotId, takeId);
+```
+
+## Take 媒体文件必须同步写入 input.json
+
+每次生成 Take 时，必须调用 `saveTakeInputJson()` 记录完整输入参数，以便复现和调试。

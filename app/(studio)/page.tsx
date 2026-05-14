@@ -3,19 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useProjectStore, type ProjectData } from "@/stores/projectStore";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Sheet,
   SheetContent,
@@ -36,23 +30,18 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Film, Plus, ChevronRight, Clock, Clapperboard, Trash2, Sparkles, Loader2, Wand2 } from "lucide-react";
+import { Film, Plus, Clock, Clapperboard, Trash2, Loader2, Users } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
 
-function ProjectCard({
-  project,
-  onDeleted,
-}: {
-  project: ProjectData;
-  onDeleted: (id: string) => void;
-}) {
+function ProjectCard({ project, onDeleted }: { project: ProjectData; onDeleted: (id: string) => void }) {
   const router = useRouter();
   const { setCurrentProject } = useProjectStore();
   const [deleting, setDeleting] = useState(false);
 
   const completedEps = project.episodes?.filter((e) => e.status === "completed").length ?? 0;
   const totalEps = project.episodes?.length ?? 0;
+  const charCount = project.characters?.length ?? 0;
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -65,6 +54,11 @@ function ProjectCard({
     } finally {
       setDeleting(false);
     }
+  };
+
+  const handleOpen = () => {
+    setCurrentProject(project);
+    router.push(`/projects/${project.id}`);
   };
 
   return (
@@ -87,7 +81,7 @@ function ProjectCard({
               <AlertDialogHeader>
                 <AlertDialogTitle>确认删除项目？</AlertDialogTitle>
                 <AlertDialogDescription>
-                  将永久删除「{project.title}」及其所有集数、分镜、生成资产，此操作不可撤销。
+                  将永久删除「{project.title}」及其所有数据，此操作不可撤销。
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -103,46 +97,42 @@ function ProjectCard({
             </AlertDialogContent>
           </AlertDialog>
         </div>
-        <CardTitle
-          className="text-base leading-snug mt-2 cursor-pointer"
-          onClick={() => {
-            setCurrentProject(project);
-            router.push(`/projects/${project.id}`);
-          }}
-        >
+        <CardTitle className="text-base leading-snug mt-2 cursor-pointer" onClick={handleOpen}>
           {project.title}
         </CardTitle>
-        <CardDescription
-          className="text-xs line-clamp-2 cursor-pointer"
-          onClick={() => {
-            setCurrentProject(project);
-            router.push(`/projects/${project.id}`);
-          }}
-        >
-          {project.globalLore || "无世界观描述"}
+        <CardDescription className="text-xs line-clamp-2 cursor-pointer" onClick={handleOpen}>
+          {project.worldSetting || project.era || "暂无世界观描述"}
         </CardDescription>
       </CardHeader>
-      <CardContent
-        className="pt-0 cursor-pointer"
-        onClick={() => {
-          setCurrentProject(project);
-          router.push(`/projects/${project.id}`);
-        }}
-      >
+      <CardContent className="pt-0 cursor-pointer" onClick={handleOpen}>
         <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <div className="flex items-center gap-1.5">
-            <Clapperboard className="size-3" />
-            <span>{totalEps} 集</span>
-            {completedEps > 0 && (
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 ml-1">
-                {completedEps} 完成
-              </Badge>
-            )}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1">
+              <Clapperboard className="size-3" />
+              <span>{totalEps} 集</span>
+              {completedEps > 0 && (
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 ml-1">
+                  {completedEps} 完成
+                </Badge>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              <Users className="size-3" />
+              <span>{charCount} 角色</span>
+            </div>
           </div>
           <div className="flex items-center gap-1">
             <Clock className="size-3" />
             <span>{new Date(project.createdAt).toLocaleDateString("zh-CN")}</span>
           </div>
+        </div>
+        <div className="mt-2 flex gap-1">
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+            {project.type === "manga-drama" ? "漫剧" : "短剧"}
+          </Badge>
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+            {project.aspect ?? "9:16"}
+          </Badge>
         </div>
       </CardContent>
     </Card>
@@ -153,29 +143,10 @@ function CreateProjectSheet({ onCreated }: { onCreated: (project: ProjectData) =
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [title, setTitle] = useState("");
-  const [idea, setIdea] = useState("");
-  const [globalLore, setGlobalLore] = useState("");
-  const [generatingLore, setGeneratingLore] = useState(false);
-
-  const handleGenerateLore = async () => {
-    const source = idea.trim() || title.trim();
-    if (!source) {
-      toast.error("请先输入项目名称或一句话创意");
-      return;
-    }
-    setGeneratingLore(true);
-    try {
-      const res = await axios.post<{ lore: string }>("/api/generate/lore", {
-        idea: source,
-      });
-      setGlobalLore(res.data.lore);
-      toast.success("世界观已生成，可直接编辑调整");
-    } catch {
-      toast.error("生成失败，请检查 DEEPSEEK_API_KEY 配置");
-    } finally {
-      setGeneratingLore(false);
-    }
-  };
+  const [type, setType] = useState("short-drama");
+  const [aspect, setAspect] = useState("9:16");
+  const [worldSetting, setWorldSetting] = useState("");
+  const [era, setEra] = useState("");
 
   const handleCreate = async () => {
     if (!title.trim()) {
@@ -184,13 +155,19 @@ function CreateProjectSheet({ onCreated }: { onCreated: (project: ProjectData) =
     }
     setLoading(true);
     try {
-      const res = await axios.post<ProjectData>("/api/projects", { title, globalLore });
+      const res = await axios.post<ProjectData>("/api/projects", {
+        title,
+        type,
+        aspect,
+        worldSetting,
+        era,
+      });
       onCreated(res.data);
       setOpen(false);
       setTitle("");
-      setIdea("");
-      setGlobalLore("");
-      toast.success("项目创建成功");
+      setWorldSetting("");
+      setEra("");
+      toast.success("项目创建成功，请先完善风格圣经和角色圣经");
     } catch {
       toast.error("创建失败，请重试");
     } finally {
@@ -204,139 +181,80 @@ function CreateProjectSheet({ onCreated }: { onCreated: (project: ProjectData) =
         <Plus className="size-4" />
         新建项目
       </SheetTrigger>
-
-      <SheetContent
-        side="right"
-        className="w-full sm:max-w-lg flex flex-col p-0 gap-0"
-      >
+      <SheetContent side="right" className="w-full sm:max-w-lg flex flex-col p-0 gap-0">
         <SheetHeader className="px-6 pt-6 pb-4 border-b border-border/50">
           <SheetTitle className="text-lg flex items-center gap-2">
             <Film className="size-5 text-primary" />
             新建影视项目
           </SheetTitle>
-          <SheetDescription>
-            设定项目基本信息，AI 将为你生成完整的世界观提案
-          </SheetDescription>
+          <SheetDescription>填写项目基本信息，完成后可继续补充风格圣经和角色圣经</SheetDescription>
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-6">
-          {/* 项目名称 */}
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="title" className="text-sm font-medium">
-              项目名称 <span className="text-destructive">*</span>
-            </Label>
+        <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
+          <div className="space-y-1.5">
+            <Label>项目名称 *</Label>
             <Input
-              id="title"
               placeholder="如：《星际逃亡》第一季"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
           </div>
 
-          <Separator />
-
-          {/* AI 世界观生成区 */}
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="text-sm font-medium">世界观设定</Label>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  输入一句话创意，AI 自动生成完整世界观提案
-                </p>
-              </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label>项目类型</Label>
+              <Select value={type} onValueChange={(v) => v && setType(v)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="short-drama">短剧</SelectItem>
+                  <SelectItem value="manga-drama">漫剧</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-
-            {/* 一句话创意输入 */}
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="idea" className="text-xs text-muted-foreground">
-                一句话创意（选填，留空则用项目名称生成）
-              </Label>
-              <div className="flex gap-2">
-                <Input
-                  id="idea"
-                  placeholder="如：豪门复仇，女主被前男友背叛后逆袭..."
-                  value={idea}
-                  onChange={(e) => setIdea(e.target.value)}
-                  className="flex-1"
-                  onKeyDown={(e) => e.key === "Enter" && handleGenerateLore()}
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleGenerateLore}
-                  disabled={generatingLore}
-                  className="gap-1.5 shrink-0 border-primary/40 text-primary hover:bg-primary/10 hover:text-primary"
-                >
-                  {generatingLore ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : (
-                    <Wand2 className="size-3.5" />
-                  )}
-                  {generatingLore ? "生成中..." : "AI 生成"}
-                </Button>
-              </div>
+            <div className="space-y-1.5">
+              <Label>默认画幅</Label>
+              <Select value={aspect} onValueChange={(v) => v && setAspect(v)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="9:16">9:16（竖屏）</SelectItem>
+                  <SelectItem value="16:9">16:9（横屏）</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+          </div>
 
-            {/* 世界观编辑区 */}
-            <div className="flex flex-col gap-1.5 relative">
-              {generatingLore && (
-                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-background/70 backdrop-blur-sm rounded-lg">
-                  <Sparkles className="size-6 text-primary animate-pulse" />
-                  <p className="text-xs text-muted-foreground">正在生成世界观提案...</p>
-                </div>
-              )}
-              <Textarea
-                placeholder={`世界观将在这里展示，你可以直接编辑修改。\n\n也可以手动填写，例如：\n【故事宇宙】现代都市，豪门权贵...\n【核心矛盾】门不当户不对的爱情...\n【主角弧光】从平凡到蜕变...`}
-                value={globalLore}
-                onChange={(e) => setGlobalLore(e.target.value)}
-                className="min-h-64 resize-none font-mono text-xs leading-relaxed"
-              />
-              {globalLore && (
-                <div className="flex items-center justify-between">
-                  <p className="text-xs text-muted-foreground">
-                    {globalLore.length} 字 · 可直接在上方编辑
-                  </p>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 text-xs gap-1 text-muted-foreground hover:text-primary"
-                    onClick={handleGenerateLore}
-                    disabled={generatingLore}
-                  >
-                    <Wand2 className="size-3" />
-                    重新生成
-                  </Button>
-                </div>
-              )}
-            </div>
+          <div className="space-y-1.5">
+            <Label>时代 / 地点</Label>
+            <Input
+              placeholder="如：现代都市 / 架空古代 / 未来科幻世界"
+              value={era}
+              onChange={(e) => setEra(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>世界观核心设定</Label>
+            <Textarea
+              placeholder="简述故事宇宙、核心矛盾、权力结构等（可后续在项目详情中补充完善）"
+              value={worldSetting}
+              onChange={(e) => setWorldSetting(e.target.value)}
+              rows={5}
+            />
           </div>
         </div>
 
         <SheetFooter className="px-6 pb-6 pt-4 border-t border-border/50">
-          <div className="flex flex-row gap-2 w-full">
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={() => setOpen(false)}
-            >
+          <div className="flex gap-2 w-full">
+            <Button variant="outline" className="flex-1" onClick={() => setOpen(false)}>
               取消
             </Button>
-            <Button
-              className="flex-1 gap-2"
-              onClick={handleCreate}
-              disabled={loading || !title.trim()}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  创建中...
-                </>
-              ) : (
-                <>
-                  <ChevronRight className="size-4" />
-                  创建项目
-                </>
-              )}
+            <Button className="flex-1 gap-2" onClick={handleCreate} disabled={loading || !title.trim()}>
+              {loading ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+              {loading ? "创建中..." : "创建项目"}
             </Button>
           </div>
         </SheetFooter>
@@ -364,9 +282,7 @@ export default function HomePage() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">影视项目</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            管理你的 AI 短剧 / 漫剧创作项目
-          </p>
+          <p className="text-sm text-muted-foreground mt-1">管理你的 AI 短剧 / 漫剧创作项目</p>
         </div>
         <CreateProjectSheet onCreated={handleCreated} />
       </div>
@@ -378,9 +294,7 @@ export default function HomePage() {
           </div>
           <div>
             <p className="font-medium">还没有项目</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              点击「新建项目」开始你的 AI 影视创作
-            </p>
+            <p className="text-sm text-muted-foreground mt-1">点击「新建项目」开始你的 AI 影视创作</p>
           </div>
           <CreateProjectSheet onCreated={handleCreated} />
         </div>

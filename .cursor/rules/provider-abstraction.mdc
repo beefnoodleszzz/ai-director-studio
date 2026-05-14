@@ -1,0 +1,56 @@
+---
+description: AI Director Studio Provider 抽象规范 — Provider 不得绑死业务流程
+globs: lib/workflows/**/*.ts
+alwaysApply: false
+---
+
+# Provider 抽象规范
+
+## 接口优先
+
+每种生成能力必须定义对应的 Provider 接口，业务流程依赖接口而非具体实现：
+
+```typescript
+// ✅ 正确：定义接口
+interface ImageProvider {
+  generate(input: ImageGenInput): Promise<{ url: string }>;
+}
+
+// ✅ 正确：工厂函数选择实现
+function getProvider(name: string): ImageProvider {
+  switch (name) {
+    case "seedream": return new SeedreamProvider();
+    case "flux": return new FluxProvider();
+    default: throw new Error(`Unknown provider: ${name}`);
+  }
+}
+```
+
+❌ 禁止在业务函数中直接 `import { SeedreamProvider }`：
+```typescript
+// ❌ 错误：硬编码 Provider
+import axios from "axios";
+const res = await axios.post("https://api.seedream.ai/..."); // 直接调用特定服务
+```
+
+## Provider 实现规范
+
+- 每个 Provider 类只负责"调用 API + 等待结果"，不含业务逻辑
+- Provider 的 `generate()` 方法抛出错误时使用标准 Error 格式，含 `message` 和可选 `retryable: boolean`
+- 轮询逻辑（如视频生成等待）封装在 Provider 类内部
+
+## 当前已注册 Provider
+
+| 能力 | Provider |
+|---|---|
+| 图像生成 | `seedream` (default) |
+| 视频生成 | `kling`, `hailuo` |
+| TTS | `minimax`, `fish-audio` |
+| SFX | `elevenlabs` |
+
+## 切换 Provider 只改配置，不改业务代码
+
+```typescript
+// 通过 shot 或 project 配置决定 provider
+const provider = getProvider(shot.preferredImageProvider ?? project.defaultImageProvider ?? "seedream");
+```

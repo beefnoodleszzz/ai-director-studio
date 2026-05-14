@@ -7,53 +7,301 @@ datasource db {
   provider = "sqlite"
 }
 
+// ─── Project ─────────────────────────────────────────────────────────────────
+
 model Project {
-  id         String      @id @default(uuid())
-  title      String
-  globalLore String
-  aspect     String      @default("16:9")
-  createdAt  DateTime    @default(now())
-  characters Character[]
-  episodes   Episode[]
+  id           String      @id @default(uuid())
+  title        String
+  type         String      @default("short-drama") // short-drama | manga-drama
+  aspect       String      @default("9:16")        // 9:16 | 16:9
+  platform     String      @default("")
+  worldSetting String      @default("") // 世界观核心设定
+  era          String      @default("") // 时代/地点
+  forbidRules  String      @default("") // 禁改规则 (JSON array as string)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  styleBible   StyleBible?
+  characters   CharacterBible[]
+  episodes     Episode[]
+  tasks        GenerationTask[]
+  exports      ExportRecord[]
+  templates    PromptTemplate[]
 }
 
-model Character {
-  id          String  @id @default(uuid())
-  projectId   String
-  name        String
-  prompt      String
-  refImageUrl String
-  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+// ─── StyleBible ───────────────────────────────────────────────────────────────
+
+model StyleBible {
+  id               String  @id @default(uuid())
+  projectId        String  @unique
+  genreTag         String  @default("") // 题材标签
+  visualStyle      String  @default("") // 视觉流派
+  colorStrategy    String  @default("") // 色彩策略
+  shotPreference   String  @default("") // 镜头偏好
+  imageDensity     String  @default("") // 画面密度
+  eraAesthetic     String  @default("") // 参考时代气质
+  setConstraints   String  @default("") // 布景约束
+  propConstraints  String  @default("") // 道具约束
+  negativeKeywords String  @default("") // 负面词库 (comma separated)
+  mangaLayoutStyle String  @default("") // 漫剧排版风格
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
+
+// ─── CharacterBible ───────────────────────────────────────────────────────────
+
+model CharacterBible {
+  id           String  @id @default(uuid())
+  projectId    String
+  name         String
+  aliases      String  @default("") // 别名 JSON array
+  gender       String  @default("")
+  ageRange     String  @default("") // 年龄段
+  role         String  @default("") // 身份
+
+  // 稳定描述
+  facialFeatures   String @default("") // 五官
+  hairstyle        String @default("") // 发型
+  bodyType         String @default("") // 身材
+  wardrobeBase     String @default("") // 服装主基调
+  temperamentTags  String @default("") // 气质关键词 (comma separated)
+  typicalExpressions String @default("") // 典型表情
+  typicalActions   String @default("") // 典型动作
+
+  // 不可变锚点
+  anchorFace     String @default("") // 必须保留脸部特征
+  anchorHair     String @default("") // 必须保留发色/发型
+  anchorWardrobe String @default("") // 必须保留穿搭母题
+
+  // 可变范围
+  wardrobeVariants String @default("") // 可换装范围
+  emotionRange     String @default("") // 可接受情绪极值
+  sceneOutfits     String @default("") // 可接受场景装束
+
+  // 关系信息
+  relationships String @default("") // 与其他角色关系 JSON
+
+  // 核心 prompt
+  basePrompt    String @default("") // 供 AI 生成用的基础 prompt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  voiceProfile VoiceProfile?
+  assets       CharacterAsset[]
+}
+
+// ─── CharacterAsset ───────────────────────────────────────────────────────────
+
+model CharacterAsset {
+  id          String @id @default(uuid())
+  characterId String
+  assetType   String // reference | angle | expression | costume | other
+  label       String @default("")
+  localPath   String
+  url         String @default("")
+  tags        String @default("[]") // JSON array of string tags
+  createdAt   DateTime @default(now())
+
+  character CharacterBible @relation(fields: [characterId], references: [id], onDelete: Cascade)
+}
+
+// ─── VoiceProfile ─────────────────────────────────────────────────────────────
+
+model VoiceProfile {
+  id          String @id @default(uuid())
+  characterId String @unique
+  voiceType   String @default("") // 声线类型
+  ageFeeling  String @default("") // 年龄感
+  emotionStyle String @default("") // 情绪风格
+  speechRate  String @default("normal") // slow | normal | fast
+  pauseStyle  String @default("") // 停顿偏好
+  volume      Float  @default(1.0)
+  languageStyle String @default("") // 语言风格
+  provider    String @default("") // TTS provider
+  voiceId     String @default("") // provider voice id
+  extraParams String @default("") // JSON extra params
+
+  character CharacterBible @relation(fields: [characterId], references: [id], onDelete: Cascade)
+}
+
+// ─── Episode ──────────────────────────────────────────────────────────────────
 
 model Episode {
-  id         String  @id @default(uuid())
-  projectId  String
-  episodeNum Int
-  summary    String
-  status     String  @default("draft")
-  outputPath String?
-  scenes     Scene[]
-  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id          String @id @default(uuid())
+  projectId   String
+  episodeNum  Int
+  title       String @default("")
+  summary     String @default("") // 剧情摘要
+  hook        String @default("") // 本集 hook
+  cliffhanger String @default("") // 结尾悬念
+  prevLink    String @default("") // 上集承接点
+  status      String @default("draft") // draft | in-progress | completed
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  scenes  Scene[]
+  exports ExportRecord[]
 }
 
+// ─── Scene ────────────────────────────────────────────────────────────────────
+
 model Scene {
-  id           String @id @default(uuid())
-  episodeId    String
-  sceneOrder   Int
-  visualPrompt String
-  dialogue     String
-  audioPrompt  String
+  id          String @id @default(uuid())
+  episodeId   String
+  sceneOrder  Int
+  location    String @default("") // 地点
+  timeOfDay   String @default("") // day | night | dawn | dusk
+  timePeriod  String @default("") // 时间段描述
+  characters  String @default("") // 出场角色 IDs JSON array
+  plotPurpose String @default("") // 场次剧情目的
+  emotionArc  String @default("") // 情绪升级
+  infoReveal  String @default("") // 信息揭示
+  summary     String @default("") // 场次摘要
+  status      String @default("pending") // pending | ready | generated | approved
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  localImage String?
-  localVideo String?
-  localAudio String?
-  localSfx   String?
-  localBgm   String?
-
-  qaStatus  String  @default("pending")
-  qaRetries Int     @default(0)
-
-  status  String  @default("pending")
   episode Episode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  shots   Shot[]
+}
+
+// ─── Shot ─────────────────────────────────────────────────────────────────────
+
+model Shot {
+  id              String @id @default(uuid())
+  sceneId         String
+  shotOrder       Int
+  shotType        String @default("") // 景别: ECU | CU | MCU | MS | FS | LS | ELS
+  cameraAngle     String @default("") // 机位: eye | low | high | bird | dutch
+  cameraMotion    String @default("") // 运动: static | pan | tilt | dolly | handheld | zoom
+  durationSecs    Float  @default(3.0)
+  subjectCharIds  String @default("") // 主体角色 IDs JSON array
+  actionDesc      String @default("") // 行为描述
+  narrativePurpose String @default("") // 叙事目的
+  emotionGoal     String @default("") // 情绪目标
+  visualPrompt    String @default("")
+  audioPrompt     String @default("")
+  dialogue        String @default("")
+  adoptedTakeId   String? // 当前采用的 take
+  readiness       String @default("draft") // draft | ready | generating | done
+  status          String @default("pending")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  scene Scene  @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  takes Take[]
+  tasks GenerationTask[]
+}
+
+// ─── Take ─────────────────────────────────────────────────────────────────────
+
+model Take {
+  id              String  @id @default(uuid())
+  shotId          String
+  takeType        String  // image | video | audio | sfx | bgm
+  provider        String  @default("")
+  paramsSnapshot  String  @default("") // JSON - 输入参数快照
+  promptSnapshot  String  @default("") // 实际使用的完整 prompt
+  refAssets       String  @default("") // 参考资产路径 JSON array
+  localImage      String? // 图片路径
+  localVideo      String? // 视频路径
+  localAudio      String? // 音频路径
+  autoScore       Float   @default(0)
+  humanScore      Float   @default(0)
+  isAdopted       Boolean @default(false)
+  isDiscarded     Boolean @default(false)
+  discardReason   String  @default("")
+  generatedAt     DateTime @default(now())
+  generationMs    Int     @default(0) // 耗时毫秒
+  createdAt       DateTime @default(now())
+
+  shot    Shot     @relation(fields: [shotId], references: [id], onDelete: Cascade)
+  reviews Review[]
+}
+
+// ─── GenerationTask ───────────────────────────────────────────────────────────
+
+model GenerationTask {
+  id           String   @id @default(uuid())
+  projectId    String
+  shotId       String?
+  parentTaskId String?
+  taskType     String   // script-breakdown | image | video | audio | sfx | bgm | assembly | qa
+  status       String   @default("queued") // queued | running | retrying | paused | failed | completed | cancelled
+  priority     Int      @default(0)
+  inputRef     String   @default("") // JSON: 输入对象引用
+  outputRef    String   @default("") // JSON: 输出对象引用
+  attempts     Int      @default(0)
+  maxAttempts  Int      @default(3)
+  logs         String   @default("") // newline-separated log entries
+  errorReason  String   @default("")
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  shot    Shot?   @relation(fields: [shotId], references: [id], onDelete: SetNull)
+}
+
+// ─── Review ───────────────────────────────────────────────────────────────────
+
+model Review {
+  id          String @id @default(uuid())
+  takeId      String
+  reviewType  String // image-qa | video-qa | face-consistency | audio-qa | prompt-compliance
+  verdict     String // pass | warn | fail
+  score       Float  @default(0)
+  failTags    String @default("") // JSON array of failure tag strings
+  suggestion  String // adopt | accept-minor | must-redo | change-provider
+  details     String @default("") // 详细原因
+  reviewedAt  DateTime @default(now())
+
+  take Take @relation(fields: [takeId], references: [id], onDelete: Cascade)
+}
+
+// ─── PromptTemplate ───────────────────────────────────────────────────────────
+
+model PromptTemplate {
+  id           String @id @default(uuid())
+  projectId    String
+  name         String
+  category     String @default("") // image | video | audio | script
+  stylePrefix  String @default("") // 风格前缀
+  charAnchor   String @default("") // 角色锚点
+  shotDesc     String @default("") // 镜头描述
+  sceneDesc    String @default("") // 场景描述
+  actionDesc   String @default("") // 行为描述
+  emotionDesc  String @default("") // 情绪描述
+  qualitySuffix String @default("") // 技术质量后缀
+  negativePrompt String @default("") // 负面约束
+  version      Int    @default(1)
+  isActive     Boolean @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+// ─── ExportRecord ─────────────────────────────────────────────────────────────
+
+model ExportRecord {
+  id          String @id @default(uuid())
+  projectId   String
+  episodeId   String?
+  exportType  String // short-drama | manga
+  status      String @default("pending") // pending | processing | completed | failed
+  outputPath  String @default("")
+  manifestPath String @default("") // manifest JSON 路径
+  totalShots  Int    @default(0)
+  duration    Float  @default(0) // 秒
+  errorReason String @default("")
+  exportedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  episode Episode? @relation(fields: [episodeId], references: [id], onDelete: SetNull)
 }
