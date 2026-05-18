@@ -10,7 +10,8 @@ interface ShotSummary {
   id: string;
   shotOrder: number;
   shotType: string;
-  status: string;
+  pipelineStage?: string | null;
+  exportReadiness?: string | null;
   dialogue: string;
   takes: Array<{
     isAdopted: boolean;
@@ -32,10 +33,12 @@ interface Props {
 
 const SHOT_STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   draft: { label: "草稿", color: "text-muted-foreground" },
-  generating: { label: "生成中", color: "text-blue-500" },
-  image_done: { label: "首帧完成", color: "text-sky-500" },
-  video_done: { label: "视频完成", color: "text-green-500" },
-  failed: { label: "失败", color: "text-destructive" },
+  image_generating: { label: "首帧生成中", color: "text-blue-500" },
+  image_ready: { label: "首帧就绪", color: "text-sky-500" },
+  video_generating: { label: "视频生成中", color: "text-blue-500" },
+  video_ready: { label: "视频就绪", color: "text-green-500" },
+  blocked_for_review: { label: "待人工处理", color: "text-destructive" },
+  ready_for_export: { label: "可导出", color: "text-green-600" },
 };
 
 function getShotVerdict(shot: ShotSummary): "pass" | "warn" | "fail" | "none" {
@@ -135,7 +138,7 @@ export function ShotTimeline({
             const verdict = getShotVerdict(shot);
             const VIcon = VERDICT_ICON[verdict];
             const vColor = VERDICT_COLOR[verdict];
-            const statusConf = SHOT_STATUS_CONFIG[shot.status] ?? SHOT_STATUS_CONFIG.draft;
+            const statusConf = SHOT_STATUS_CONFIG[shot.pipelineStage ?? "draft"] ?? SHOT_STATUS_CONFIG.draft;
             const isActive = shot.id === activeShot;
 
             const hasTake = shot.takes.some((t) => t.takeType === "image" && !t.isDiscarded);

@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { use, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Loader2, Sparkles } from "lucide-react";
@@ -37,7 +37,7 @@ interface EpisodeLite {
   hook: string;
   cliffhanger: string;
   scriptDraft?: string;
-  productionStage?: string;
+  productionStage: string;
 }
 
 interface ProjectDetail {
@@ -47,10 +47,13 @@ interface ProjectDetail {
   era: string;
   platform: string;
   forbidRules: string;
-  productionStage: string;
   storyOutline: string;
   characters: CharacterLite[];
   episodes: EpisodeLite[];
+  progress?: {
+    currentStage: string;
+    stageCounts: Record<string, number>;
+  };
 }
 
 interface StoryFeedback {
@@ -245,19 +248,12 @@ export default function StoryWorkbenchPage({ params }: { params: Promise<{ id: s
   const [pendingCharacters, setPendingCharacters] = useState<Array<{ name: string; description: string }>>([]);
   const [pendingBreakdownData, setPendingBreakdownData] = useState<unknown>(null);
   const [storyFeedback, setStoryFeedback] = useState<StoryFeedback | null>(null);
-  const [scriptSections, setScriptSections] = useState<ScriptSections>({
-    opening: "",
-    scenePlan: "",
-    dialogueMoments: "",
-    fullText: "",
-    endingHook: "",
-  });
-
-  const loadProject = async () => {
+  const loadProject = useCallback(async (options?: { selectedEpisodeId?: string }) => {
     const [projectRes, feedbackRes] = await Promise.all([
       axios.get<ProjectDetail>(`/api/projects/${projectId}`),
       axios.get<StoryFeedback>(`/api/projects/${projectId}/story-feedback`),
     ]);
+
     setProject(projectRes.data);
     setStoryFeedback(feedbackRes.data);
     setOutlineDraft(projectRes.data.storyOutline || "");
@@ -266,8 +262,14 @@ export default function StoryWorkbenchPage({ params }: { params: Promise<{ id: s
     }
     if (projectRes.data.episodes.length > 0) {
       const firstEpisode = projectRes.data.episodes[0];
-      setSelectedEpisodeId((prev) => prev || firstEpisode.id);
-      setScriptDraft(firstEpisode.scriptDraft || "");
+      const nextEpisodeId = options?.selectedEpisodeId || firstEpisode.id;
+      setSelectedEpisodeId(nextEpisodeId);
+      const nextEpisode =
+        projectRes.data.episodes.find((episode) => episode.id === nextEpisodeId) ?? firstEpisode;
+      setScriptDraft(nextEpisode?.scriptDraft || "");
+    } else {
+      setSelectedEpisodeId("");
+      setScriptDraft("");
     }
     setCastDrafts(
       Object.fromEntries(
@@ -282,18 +284,24 @@ export default function StoryWorkbenchPage({ params }: { params: Promise<{ id: s
         ])
       )
     );
-  };
+  }, [projectId]);
 
-  useEffect(() => {
-    loadProject()
+  if (loading) {
+    void loadProject()
       .catch(() => toast.error("加载故事工作台失败"))
       .finally(() => setLoading(false));
-  }, [projectId]);
+  }
 
   const selectedEpisode = useMemo(
     () => project?.episodes.find((episode) => episode.id === selectedEpisodeId) ?? null,
     [project, selectedEpisodeId]
   );
+
+  const handleEpisodeChange = (episodeId: string) => {
+    setSelectedEpisodeId(episodeId);
+    const nextEpisode = project?.episodes.find((episode) => episode.id === episodeId) ?? null;
+    setScriptDraft(nextEpisode?.scriptDraft || "");
+  };
 
   const outline = useMemo(() => safeParseOutline(outlineDraft), [outlineDraft]);
   const selectedEpisodeBeat = useMemo(() => {
@@ -361,13 +369,7 @@ export default function StoryWorkbenchPage({ params }: { params: Promise<{ id: s
     [castDrafts]
   );
 
-  useEffect(() => {
-    setScriptDraft(selectedEpisode?.scriptDraft || "");
-  }, [selectedEpisode?.id, selectedEpisode?.scriptDraft]);
-
-  useEffect(() => {
-    setScriptSections(parseScriptSections(scriptDraft));
-  }, [scriptDraft, selectedEpisode?.id]);
+  const scriptSections = useMemo(() => parseScriptSections(scriptDraft), [scriptDraft]);
 
   const blockers = useMemo(() => {
     const items: Array<{ title: string; detail: string }> = [];
@@ -421,7 +423,6 @@ export default function StoryWorkbenchPage({ params }: { params: Promise<{ id: s
 
   const handleStructuredScriptChange = (field: keyof ScriptSections, value: string) => {
     const next = { ...scriptSections, [field]: value };
-    setScriptSections(next);
     setScriptDraft(composeScriptDraft(next));
   };
 
@@ -551,7 +552,6 @@ export default function StoryWorkbenchPage({ params }: { params: Promise<{ id: s
       await axios.patch(`/api/projects/${projectId}/episodes/${selectedEpisodeId}/script`, {
         scriptDraft,
         scriptSource: "manual",
-        productionStage: "script_ready",
       });
       await loadProject();
       toast.success("剧本正文已保存");
@@ -632,7 +632,7 @@ export default function StoryWorkbenchPage({ params }: { params: Promise<{ id: s
       stickyHeader
       actions={
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline">当前阶段：{project.productionStage}</Badge>
+          <Badge variant="outline">当前剧集阶段：{selectedEpisode?.productionStage ?? "idea"}</Badge>
           {hasLead ? <Badge variant="secondary">主角已锁定</Badge> : null}
         </div>
       }
@@ -649,7 +649,7 @@ export default function StoryWorkbenchPage({ params }: { params: Promise<{ id: s
             这里不是普通的“填几段文本然后拆解”。它是上游内容总控台，用来把故事方向、主角身份、单集正文这些关键决策先锁定，再把稳定输入送进后面的镜头生产系统。
           </p>
           <StoryStageStrip
-            currentStage={project.productionStage}
+            currentStage={selectedEpisode?.productionStage ?? "idea"}
             hasOutline={hasOutline}
             hasLead={hasLead}
             hasScript={hasScript}
@@ -833,7 +833,7 @@ export default function StoryWorkbenchPage({ params }: { params: Promise<{ id: s
         dialogueGuidance={relationshipGuidance}
         voiceStyleHints={voiceStyleHints}
         working={working}
-        onEpisodeChange={setSelectedEpisodeId}
+        onEpisodeChange={handleEpisodeChange}
         onSectionChange={handleStructuredScriptChange}
         onRawChange={setScriptDraft}
         onGenerate={handleGenerateScript}

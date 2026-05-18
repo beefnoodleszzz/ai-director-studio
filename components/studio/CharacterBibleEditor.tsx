@@ -698,7 +698,9 @@ function CharacterAssetUploader({ projectId, characterId }: { projectId: string;
         <div className="flex items-center gap-2">
           <Select value={assetType} onValueChange={(v) => v && setAssetType(v)}>
             <SelectTrigger className="h-7 w-28 text-xs">
-              <SelectValue />
+              <SelectValue>
+                {ASSET_TYPE_LABELS[assetType] ?? assetType}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {Object.entries(ASSET_TYPE_LABELS).map(([v, l]) => (

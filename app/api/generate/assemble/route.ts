@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { assembleWithTask, previewShortDramaExport } from "@/lib/workflows/assembly";
+import { assembleWithTask, ExportPreflightError, previewShortDramaExport } from "@/lib/workflows/assembly";
 
 export async function POST(req: NextRequest) {
   try {
@@ -42,6 +42,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ taskId, ...result });
   } catch (err) {
     console.error("[api/generate/assemble]", err);
+    if (err instanceof ExportPreflightError) {
+      return NextResponse.json(
+        {
+          error: err.message,
+          preflight: err.preflight,
+        },
+        { status: 422 }
+      );
+    }
     return NextResponse.json({ error: "Assembly failed" }, { status: 500 });
   }
 }

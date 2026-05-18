@@ -51,7 +51,7 @@ function ProjectCard({ project, onDeleted }: { project: ProjectData; onDeleted: 
   const { setCurrentProject } = useProjectStore();
   const [deleting, setDeleting] = useState(false);
 
-  const completedEps = project.episodes?.filter((e) => e.status === "completed").length ?? 0;
+  const completedEps = project.episodes?.filter((e) => e.productionStage === "production_ready").length ?? 0;
   const totalEps = project.episodes?.length ?? 0;
   const charCount = project.characters?.length ?? 0;
 

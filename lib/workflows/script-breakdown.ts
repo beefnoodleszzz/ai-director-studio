@@ -10,6 +10,7 @@
 
 import axios from "axios";
 import { prisma } from "@/lib/prisma";
+import { recalculateEpisodeStage } from "@/lib/production-state";
 import { enqueueTask } from "@/lib/task-queue";
 import type { ScriptBreakdownResult, StoryOutlineResult } from "./types";
 
@@ -194,9 +195,9 @@ export async function breakdownScript(input: BreakdownScriptInput): Promise<Brea
         summary: parsed.episodeSummary,
         hook: parsed.hook,
         cliffhanger: parsed.cliffhanger,
-        productionStage: "cast_locked",
       },
     });
+    await recalculateEpisodeStage(episodeId);
     return { status: "NEED_CHARACTER_SETUP", newCharacters: parsed.newCharacters, pendingData: parsed };
   }
 
@@ -227,8 +228,6 @@ async function commitScenesAndShots(episodeId: string, data: ScriptBreakdownResu
       summary: data.episodeSummary,
       hook: data.hook,
       cliffhanger: data.cliffhanger,
-      productionStage: "breakdown_ready",
-      status: "in-progress",
     },
   });
 
@@ -247,7 +246,6 @@ async function commitScenesAndShots(episodeId: string, data: ScriptBreakdownResu
         plotPurpose: sceneData.plotPurpose ?? "",
         emotionArc: sceneData.emotionArc ?? "",
         summary: sceneData.summary ?? "",
-        status: "pending",
       },
     });
 
@@ -267,13 +265,12 @@ async function commitScenesAndShots(episodeId: string, data: ScriptBreakdownResu
             visualPrompt: shotData.visualPrompt ?? "",
             audioPrompt: shotData.audioPrompt ?? "",
             dialogue: shotData.dialogue ?? "",
-            readiness: "ready",
-            status: "pending",
           },
         });
       }
     }
   }
+  await recalculateEpisodeStage(episodeId);
 }
 
 // ─── 含任务追踪的包装入口 ─────────────────────────────────────────────────────
@@ -283,7 +280,11 @@ export async function breakdownScriptWithTask(input: BreakdownScriptInput): Prom
     {
       projectId: input.projectId,
       taskType: "script-breakdown",
-      inputRef: { episodeId: input.episodeId },
+      inputRef: {
+        projectId: input.projectId,
+        episodeId: input.episodeId,
+        script: input.script,
+      },
     },
     () => breakdownScript(input)
   );

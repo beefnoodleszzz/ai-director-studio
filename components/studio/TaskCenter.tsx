@@ -103,7 +103,6 @@ function TaskRow({ task, onCancel, onRetry, onDelete }: TaskRowProps) {
   let inputRef: {
     shotId?: string;
     provider?: string;
-    adoptedTakeId?: string;
     adoptedImageTakeId?: string;
     episodeId?: string;
     retryStrategy?: {

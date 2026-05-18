@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { initProjectDirs } from "@/lib/asset";
+import { deriveProjectProgress } from "@/lib/production-state";
 
 export async function GET() {
   try {
@@ -8,11 +9,16 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
       include: {
         characters: { select: { id: true, name: true } },
-        episodes: { orderBy: { episodeNum: "asc" }, select: { id: true, episodeNum: true, title: true, status: true } },
+        episodes: { orderBy: { episodeNum: "asc" }, select: { id: true, episodeNum: true, title: true, productionStage: true } },
         styleBible: { select: { id: true, genreTag: true, visualStyle: true } },
       },
     });
-    return NextResponse.json(projects);
+    return NextResponse.json(
+      projects.map((project) => ({
+        ...project,
+        progress: deriveProjectProgress(project.episodes),
+      }))
+    );
   } catch (err) {
     console.error("[GET /api/projects]", err);
     return NextResponse.json({ error: "Failed to fetch projects" }, { status: 500 });

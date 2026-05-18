@@ -19,7 +19,7 @@ export interface EpisodeData {
   episodeNum: number;
   title?: string;
   summary: string;
-  status: string;
+  productionStage: string;
   scenes?: unknown[];
 }
 
@@ -34,7 +34,6 @@ export interface ProjectData {
   characters: CharacterData[];
   episodes: EpisodeData[];
   styleBible?: { id: string; genreTag?: string; visualStyle?: string } | null;
-  // 保留兼容旧字段
   globalLore?: string;
 }
 

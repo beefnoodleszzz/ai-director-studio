@@ -1,5 +1,6 @@
 import axios from "axios";
 import { prisma } from "@/lib/prisma";
+import { recalculateEpisodeStage } from "@/lib/production-state";
 import type {
   NewCharacterDraft,
   StoryCastGenerationResult,
@@ -435,9 +436,14 @@ export async function generateProjectOutline(projectId: string): Promise<StoryOu
     where: { id: projectId },
     data: {
       storyOutline: JSON.stringify(parsed),
-      productionStage: "outline_ready",
     },
   });
+
+  const episodes = await prisma.episode.findMany({
+    where: { projectId },
+    select: { id: true },
+  });
+  await Promise.all(episodes.map((episode) => recalculateEpisodeStage(episode.id)));
 
   return parsed;
 }
@@ -535,10 +541,11 @@ export async function lockProjectCast(projectId: string, leadCharacterId: string
     data: { isLead: true },
   });
 
-  await prisma.project.update({
-    where: { id: projectId },
-    data: { productionStage: "cast_locked" },
+  const episodes = await prisma.episode.findMany({
+    where: { projectId },
+    select: { id: true },
   });
+  await Promise.all(episodes.map((episode) => recalculateEpisodeStage(episode.id)));
 
   return { ok: true };
 }
@@ -606,9 +613,9 @@ export async function generateEpisodeScript(projectId: string, episodeId: string
       summary: beat?.logline || episode.summary,
       scriptDraft,
       scriptSource: "generated",
-      productionStage: "script_ready",
     },
   });
+  await recalculateEpisodeStage(episodeId);
 
   return {
     title: beat?.title || episode.title,

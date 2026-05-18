@@ -17,6 +17,7 @@ import { downloadToTake, saveTakeInputJson, initTakeDirs, getLocalPath } from "@
 import { enqueueTask, markCurrentTaskBlocked } from "@/lib/task-queue";
 import { generateId, sleep } from "@/lib/utils";
 import { recommendProvider } from "@/lib/provider-recommender";
+import { normalizeShotStateById, recalculateEpisodeStage } from "@/lib/production-state";
 import type { VideoGenInput, QAReviewResult } from "./types";
 import { buildBlockMeta } from "@/lib/studio-contracts";
 import { buildContinuityContext } from "@/lib/continuity";
@@ -135,7 +136,7 @@ async function extractFrame(videoPath: string, timePercent: string, outputPath: 
 
 async function qaVideoMultiFrame(videoPath: string, tmpDir: string): Promise<QAReviewResult> {
   const qaKey = process.env.DEEPSEEK_API_KEY;
-  if (!qaKey) return { verdict: "pass", score: 0.7, failTags: [], suggestion: "adopt", details: "QA skipped (no API key)" };
+  if (!qaKey) return { verdict: "warn", score: 0.3, failTags: [], suggestion: "accept-minor", details: "Video QA unavailable" };
 
   const qaBaseUrl = process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com/v1";
   const qaModel = process.env.VISION_QA_MODEL ?? "deepseek-chat";
@@ -150,7 +151,7 @@ async function qaVideoMultiFrame(videoPath: string, tmpDir: string): Promise<QAR
       fs.unlinkSync(framePath);
     }
   } catch {
-    return { verdict: "pass", score: 0.6, failTags: [], suggestion: "adopt", details: "Frame extraction failed, QA skipped" };
+    return { verdict: "warn", score: 0.3, failTags: [], suggestion: "accept-minor", details: "Frame extraction failed" };
   }
 
   try {
@@ -181,7 +182,7 @@ async function qaVideoMultiFrame(videoPath: string, tmpDir: string): Promise<QAR
       details: (result.issues ?? []).join("; "),
     };
   } catch {
-    return { verdict: "pass", score: 0.6, failTags: [], suggestion: "adopt", details: "QA API error, defaulting to pass" };
+    return { verdict: "warn", score: 0.3, failTags: [], suggestion: "accept-minor", details: "Video QA fallback" };
   }
 }
 
@@ -193,7 +194,7 @@ async function qaVideoContinuity(input: {
 }): Promise<QAReviewResult> {
   const qaKey = process.env.DEEPSEEK_API_KEY;
   if (!qaKey || input.framesBase64.length === 0) {
-    return { verdict: "pass", score: 0.72, failTags: [], suggestion: "adopt", details: "Continuity QA skipped (no API key)" };
+    return { verdict: "warn", score: 0.3, failTags: [], suggestion: "accept-minor", details: "Continuity QA unavailable" };
   }
 
   const qaBaseUrl = process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com/v1";
@@ -235,7 +236,7 @@ async function qaVideoContinuity(input: {
       details: Array.isArray(result.details) ? result.details.join("; ") : String(result.details ?? ""),
     };
   } catch {
-    return { verdict: "pass", score: 0.68, failTags: [], suggestion: "adopt", details: "Continuity QA fallback" };
+    return { verdict: "warn", score: 0.3, failTags: [], suggestion: "accept-minor", details: "Continuity QA fallback" };
   }
 }
 
@@ -255,12 +256,11 @@ export async function generateShotVideo(input: VideoGenInput): Promise<GenerateV
     sceneId,
     shotId,
     adoptedImageTakeId,
-    adoptedTakeId,
     visualPrompt,
     provider,
     stopOnQaFail = true,
   } = input;
-  const resolvedAdoptedImageTakeId = adoptedImageTakeId ?? adoptedTakeId;
+  const resolvedAdoptedImageTakeId = adoptedImageTakeId;
 
   if (!resolvedAdoptedImageTakeId) {
     throw new Error("adoptedImageTakeId is required");
@@ -279,7 +279,6 @@ export async function generateShotVideo(input: VideoGenInput): Promise<GenerateV
     where: { id: shotId },
     data: {
       pipelineStage: "video_generating",
-      status: "generating",
       blockReason: "",
       blockMeta: "",
     },
@@ -466,11 +465,6 @@ export async function generateShotVideo(input: VideoGenInput): Promise<GenerateV
             where: { id: shotId },
             data: {
               adoptedVideoTakeId: takeId,
-              status: "blocked",
-              hasMotionVideo: true,
-              exportReadiness: "blocked",
-              fallbackMode: "none",
-              pipelineStage: "blocked_for_review",
               blockReason: blockMeta.code,
               blockMeta: buildBlockMeta(blockMeta),
             },
@@ -484,16 +478,14 @@ export async function generateShotVideo(input: VideoGenInput): Promise<GenerateV
             where: { id: shotId },
             data: {
               adoptedVideoTakeId: takeId,
-              status: "video_done",
-              hasMotionVideo: true,
-              exportReadiness: mergedVerdict === "fail" ? "warn" : "ready",
-              fallbackMode: "none",
-              pipelineStage: "video_ready",
               blockReason: "",
               blockMeta: "",
             },
           });
         }
+
+        await normalizeShotStateById(shotId);
+        await recalculateEpisodeStage(episodeId);
 
         return { takeId, localPath: saved.localPath, url: saved.url, qa };
       }
@@ -545,10 +537,20 @@ export async function generateShotVideoWithTask(input: VideoGenInput) {
       taskStage: "video",
       parentTaskId: input.parentTaskId,
       inputRef: {
+        projectId: input.projectId,
+        episodeId: input.episodeId,
+        sceneId: input.sceneId,
         shotId: input.shotId,
-        adoptedImageTakeId: input.adoptedImageTakeId ?? input.adoptedTakeId,
+        adoptedImageTakeId: input.adoptedImageTakeId,
+        visualPrompt: input.visualPrompt,
         provider: input.provider,
+        subjectSummary: input.subjectSummary,
+        referenceAssetUrls: input.referenceAssetUrls,
+        autoContinue: input.autoContinue,
         stopOnQaFail: input.stopOnQaFail ?? true,
+        parentTaskId: input.parentTaskId,
+        outputType: "video",
+        stage: "video",
       },
     },
     () => generateShotVideo(input)

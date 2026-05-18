@@ -162,7 +162,6 @@ export async function POST(req: NextRequest) {
         projectId,
         episodeId,
         exportType: "manga",
-        status: "completed",
         outputPath: relativeLongStripPath ?? "",
         manifestPath: relativeManifestPath,
         totalShots: shotDataList.length,

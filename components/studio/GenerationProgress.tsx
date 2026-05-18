@@ -48,7 +48,7 @@ export function GenerationProgress({
       };
 
       updateTask(taskId, {
-        status: data.status as "pending" | "processing" | "completed" | "failed",
+        taskStatus: data.status as "pending" | "processing" | "completed" | "failed",
         progress: data.progress,
         result: data.result,
         message: data.message,
@@ -79,7 +79,7 @@ export function GenerationProgress({
     completed: <CheckCircle2 className="size-3.5 text-green-500" />,
     failed: <XCircle className="size-3.5 text-destructive" />,
   };
-  const statusIcon = statusIconMap[task.status] ?? statusIconMap.pending;
+  const statusIcon = statusIconMap[task.taskStatus] ?? statusIconMap.pending;
 
   const statusColorMap: Record<string, "default" | "secondary" | "destructive"> = {
     pending: "secondary",
@@ -87,7 +87,7 @@ export function GenerationProgress({
     completed: "secondary",
     failed: "destructive",
   };
-  const statusColor = statusColorMap[task.status] ?? "secondary";
+  const statusColor = statusColorMap[task.taskStatus] ?? "secondary";
 
   return (
     <div className="flex flex-col gap-1.5 w-full">
@@ -104,8 +104,8 @@ export function GenerationProgress({
         value={task.progress}
         className={cn(
           "h-1.5",
-          task.status === "completed" && "[&>div]:bg-green-500",
-          task.status === "failed" && "[&>div]:bg-destructive"
+          task.taskStatus === "completed" && "[&>div]:bg-green-500",
+          task.taskStatus === "failed" && "[&>div]:bg-destructive"
         )}
       />
       {task.message && (

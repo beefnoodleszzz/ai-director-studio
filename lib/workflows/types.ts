@@ -166,7 +166,6 @@ export interface VideoGenInput {
   episodeId: string;
   sceneId: string;
   shotId: string;
-  adoptedTakeId?: string;
   adoptedImageTakeId?: string;
   visualPrompt: string;
   provider?: string;

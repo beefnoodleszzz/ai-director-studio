@@ -22,8 +22,8 @@ interface Shot {
   actionDesc: string;
   visualPrompt: string;
   dialogue: string;
-  status: string;
-  readiness: string;
+  pipelineStage: string;
+  exportReadiness: string;
   takes: { id: string; takeType: string; isAdopted: boolean; localImage: string | null; localVideo: string | null; autoScore: number }[];
 }
 
@@ -34,7 +34,6 @@ interface Scene {
   timeOfDay: string;
   summary: string;
   emotionArc: string;
-  status: string;
   shots: Shot[];
 }
 
@@ -45,9 +44,18 @@ interface Episode {
   summary: string;
   hook: string;
   cliffhanger: string;
-  status: string;
+  productionStage: string;
   scenes: Scene[];
 }
+
+const EPISODE_STAGE_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
+  idea: { label: "构思中", variant: "outline" },
+  outline_ready: { label: "大纲就绪", variant: "outline" },
+  cast_locked: { label: "角色锁定", variant: "secondary" },
+  script_ready: { label: "剧本就绪", variant: "secondary" },
+  breakdown_ready: { label: "拆解完成", variant: "secondary" },
+  production_ready: { label: "可生产/导出", variant: "default" },
+};
 
 export default function EpisodeDetailPage({
   params,
@@ -124,8 +132,11 @@ export default function EpisodeDetailPage({
       contentClassName="app-page-narrow"
       stickyHeader
       actions={
-        <Badge variant={episode.status === "completed" ? "default" : episode.status === "in-progress" ? "secondary" : "outline"} className="mt-1">
-          {episode.status === "completed" ? "已完成" : episode.status === "in-progress" ? "制作中" : "草稿"}
+        <Badge
+          variant={(EPISODE_STAGE_LABELS[episode.productionStage] ?? EPISODE_STAGE_LABELS.idea).variant}
+          className="mt-1"
+        >
+          {(EPISODE_STAGE_LABELS[episode.productionStage] ?? EPISODE_STAGE_LABELS.idea).label}
         </Badge>
       }
     >
@@ -236,6 +247,9 @@ export default function EpisodeDetailPage({
                       )}
                       {shot.takes.filter((t) => t.takeType === "video").length > 0 && (
                         <Badge variant="default" className="text-[10px] px-1.5 py-0">视频</Badge>
+                      )}
+                      {shot.exportReadiness === "blocked" && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-destructive/30 text-destructive">阻断</Badge>
                       )}
                     </div>
                   </div>

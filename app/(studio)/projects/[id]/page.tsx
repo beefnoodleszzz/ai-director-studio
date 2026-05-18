@@ -43,10 +43,23 @@ interface ProjectDetail {
     id: string;
     episodeNum: number;
     title: string;
-    status: string;
-    scenes: { id: string; shots: { id: string; status: string }[] }[];
+    productionStage: string;
+    scenes: { id: string; shots: { id: string; pipelineStage: string; exportReadiness: string }[] }[];
   }[];
+  progress?: {
+    currentStage: string;
+    stageCounts: Record<string, number>;
+  };
 }
+
+const EPISODE_STAGE_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
+  idea: { label: "构思中", variant: "outline" },
+  outline_ready: { label: "大纲就绪", variant: "outline" },
+  cast_locked: { label: "角色锁定", variant: "secondary" },
+  script_ready: { label: "剧本就绪", variant: "secondary" },
+  breakdown_ready: { label: "拆解完成", variant: "secondary" },
+  production_ready: { label: "可生产/导出", variant: "default" },
+};
 
 function NavCard({
   href,
@@ -143,7 +156,7 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
     project.episodes
       ?.flatMap((e) => e.scenes)
       .flatMap((s) => s.shots)
-      .filter((sh) => sh.status === "video_done").length ?? 0;
+      .filter((sh) => sh.pipelineStage === "video_ready" || sh.pipelineStage === "ready_for_export").length ?? 0;
 
   return (
     <ProjectPageShell
@@ -300,7 +313,8 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
           <div className="space-y-2">
             {project.episodes.map((ep) => {
               const shots = ep.scenes.flatMap((s) => s.shots);
-              const done = shots.filter((sh) => sh.status === "video_done").length;
+              const done = shots.filter((sh) => sh.pipelineStage === "video_ready" || sh.pipelineStage === "ready_for_export").length;
+              const stageInfo = EPISODE_STAGE_LABELS[ep.productionStage] ?? EPISODE_STAGE_LABELS.idea;
               return (
                 <Link key={ep.id} href={`/projects/${id}/episodes/${ep.id}`}>
                   <Card className="hover:border-primary/40 transition-colors cursor-pointer">
@@ -320,20 +334,10 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
                         </div>
                         <div className="flex items-center gap-2">
                           <Badge
-                            variant={
-                              ep.status === "completed"
-                                ? "default"
-                                : ep.status === "in-progress"
-                                  ? "secondary"
-                                  : "outline"
-                            }
+                            variant={stageInfo.variant}
                             className="text-xs"
                           >
-                            {ep.status === "completed"
-                              ? "已完成"
-                              : ep.status === "in-progress"
-                                ? "制作中"
-                                : "草稿"}
+                            {stageInfo.label}
                           </Badge>
                           <ArrowRight className="size-4 text-muted-foreground" />
                         </div>

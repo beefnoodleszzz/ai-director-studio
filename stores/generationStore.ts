@@ -4,7 +4,7 @@ import { create } from "zustand";
 type TaskStatus = {
   taskId: string;
   type: string;
-  status: "pending" | "processing" | "completed" | "failed";
+  taskStatus: "pending" | "processing" | "completed" | "failed";
   progress: number;
   message?: string;
   result?: string;

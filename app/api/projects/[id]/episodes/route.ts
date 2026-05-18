@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { recalculateEpisodeStage } from "@/lib/production-state";
 
 export async function GET(
   _req: NextRequest,
@@ -13,7 +14,12 @@ export async function GET(
       include: {
         scenes: {
           orderBy: { sceneOrder: "asc" },
-          include: { shots: { orderBy: { shotOrder: "asc" }, select: { id: true, status: true } } },
+          include: {
+            shots: {
+              orderBy: { shotOrder: "asc" },
+              select: { id: true, pipelineStage: true, exportReadiness: true },
+            },
+          },
         },
       },
     });
@@ -45,12 +51,12 @@ export async function POST(
         episodeNum: nextNum,
         title: body.title ?? `第 ${nextNum} 集`,
         summary: body.summary ?? "",
-        status: "draft",
       },
       include: { scenes: true },
     });
+    const normalized = await recalculateEpisodeStage(episode.id);
 
-    return NextResponse.json(episode, { status: 201 });
+    return NextResponse.json(normalized, { status: 201 });
   } catch (err) {
     console.error("[POST /api/projects/:id/episodes]", err);
     return NextResponse.json({ error: "Failed" }, { status: 500 });

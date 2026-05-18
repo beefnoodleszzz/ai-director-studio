@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { recalculateEpisodeStage } from "@/lib/production-state";
 
 export async function GET(
   _req: NextRequest,
@@ -51,9 +52,9 @@ export async function PATCH(
       scriptDraft: string;
       scriptSource: string;
       productionStage: string;
-      status: string;
     }>;
     const episode = await prisma.episode.update({ where: { id: epId }, data: body });
+    await recalculateEpisodeStage(epId);
     return NextResponse.json(episode);
   } catch (err) {
     console.error("[PATCH /api/projects/:id/episodes/:epId]", err);

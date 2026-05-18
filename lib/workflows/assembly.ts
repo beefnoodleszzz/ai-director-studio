@@ -14,6 +14,7 @@ import { prisma } from "@/lib/prisma";
 import { assembleEpisode } from "@/lib/ffmpeg";
 import { paths, initExportDirs, toAbsolutePublicPath } from "@/lib/asset";
 import { enqueueTask } from "@/lib/task-queue";
+import { recalculateEpisodeStage } from "@/lib/production-state";
 import type { AssemblyInput } from "./types";
 
 // ─── Manifest 结构 ────────────────────────────────────────────────────────────
@@ -114,6 +115,16 @@ export interface AssemblyResult {
   preflight: ExportPreflight;
   manifestUrl: string;
   bgm: ExportPreflight["bgm"];
+}
+
+export class ExportPreflightError extends Error {
+  readonly preflight: ExportPreflight;
+
+  constructor(message: string, preflight: ExportPreflight) {
+    super(message);
+    this.name = "ExportPreflightError";
+    this.preflight = preflight;
+  }
 }
 
 interface ResolvedShotMedia {
@@ -475,14 +486,23 @@ export async function assembleShortDrama(input: AssemblyInput): Promise<Assembly
     throw new Error("No adopted takes found for assembly");
   }
 
+  if (!preflight.ok) {
+    const blockingMessages = preflight.issues
+      .filter((issue) => issue.severity === "error")
+      .map((issue) => `S${issue.sceneOrder}-#${issue.shotOrder}: ${issue.message}`)
+      .slice(0, 5);
+    throw new ExportPreflightError(
+      `Export blocked by preflight: ${blockingMessages.join(" | ") || "unknown blocking issues"}`,
+      preflight
+    );
+  }
+
   // 初始化导出目录
   initExportDirs(projectId, episodeId);
   const exportsDir = paths.exports(projectId, episodeId);
   const outputFilename = `episode_${episodeId}_${Date.now()}.mp4`;
   const outputPath = path.join(exportsDir, outputFilename);
   const outputUrl = `/workspace/projects/${projectId}/episodes/${episodeId}/exports/${outputFilename}`;
-
-  await prisma.episode.update({ where: { id: episodeId }, data: { status: "in-progress" } });
 
   await assembleEpisode(mediaItems, {
     outputPath,
@@ -524,7 +544,6 @@ export async function assembleShortDrama(input: AssemblyInput): Promise<Assembly
       projectId,
       episodeId,
       exportType: "short-drama",
-      status: "completed",
       outputPath: outputUrl,
       manifestPath: manifestUrl,
       totalShots: manifestEntries.length,
@@ -536,7 +555,7 @@ export async function assembleShortDrama(input: AssemblyInput): Promise<Assembly
     },
   });
 
-  await prisma.episode.update({ where: { id: episodeId }, data: { status: "completed" } });
+  await recalculateEpisodeStage(episodeId);
 
   return {
     exportRecordId: exportRecord.id,

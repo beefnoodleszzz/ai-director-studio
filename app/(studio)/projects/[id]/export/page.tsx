@@ -29,14 +29,13 @@ interface Episode {
   id: string;
   episodeNum: number;
   title: string;
-  status: string;
+  productionStage: string;
 }
 
 interface ExportRecord {
   id: string;
   episodeId: string | null;
   exportType: string;
-  status: string;
   outputPath: string;
   manifestPath: string;
   totalShots: number;
@@ -65,9 +64,14 @@ interface ExportRecord {
   } | null;
 }
 
+function getExportStatus(record: ExportRecord): "completed" | "failed" | "processing" {
+  if (record.errorReason) return "failed";
+  if (record.outputPath) return "completed";
+  return "processing";
+}
+
 const STATUS_ICON = {
-  pending: Clock,
-  processing: Loader2,
+  processing: Clock,
   completed: CheckCircle2,
   failed: AlertTriangle,
 };
@@ -385,7 +389,8 @@ function ExportHistoryRow({
   const [loadingManifest, setLoadingManifest] = useState(false);
   const [redoingShotId, setRedoingShotId] = useState<string | null>(null);
 
-  const Icon = STATUS_ICON[record.status as keyof typeof STATUS_ICON] ?? Film;
+  const exportStatus = getExportStatus(record);
+  const Icon = STATUS_ICON[exportStatus] ?? Film;
 
   const loadManifest = async () => {
     if (manifest) { setExpanded(!expanded); return; }
@@ -443,7 +448,7 @@ function ExportHistoryRow({
           onClick={loadManifest}
         >
           <div className="flex items-center gap-3">
-            <Icon className={`size-5 ${record.status === "completed" ? "text-green-500" : record.status === "failed" ? "text-destructive" : "text-muted-foreground"}`} />
+            <Icon className={`size-5 ${exportStatus === "completed" ? "text-green-500" : exportStatus === "failed" ? "text-destructive" : "text-muted-foreground"}`} />
             <div>
               <p className="text-sm font-medium">
                 {ep ? ep.title || `第 ${ep.episodeNum} 集` : "未知集数"}
@@ -455,8 +460,8 @@ function ExportHistoryRow({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant={record.status === "completed" ? "default" : "outline"} className="text-xs">
-              {record.status === "completed" ? "完成" : record.status === "failed" ? "失败" : "处理中"}
+            <Badge variant={exportStatus === "completed" ? "default" : "outline"} className="text-xs">
+              {exportStatus === "completed" ? "完成" : exportStatus === "failed" ? "失败" : "处理中"}
             </Badge>
             {record.preflight?.counts?.continuityWarnShots ? (
               <Badge variant="outline" className="text-xs border-amber-500/30 text-amber-700">
@@ -464,7 +469,7 @@ function ExportHistoryRow({
               </Badge>
             ) : null}
             {loadingManifest && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
-            {record.status === "completed" && record.outputPath && (
+            {exportStatus === "completed" && record.outputPath && (
               <a href={record.outputPath} download onClick={(e) => e.stopPropagation()}>
                 <Button size="sm" variant="outline" className="h-7 text-xs">
                   <Download className="size-3.5 mr-1" /> 下载

@@ -14,6 +14,7 @@ import { prisma } from "@/lib/prisma";
 import { downloadToTake, saveTakeInputJson, initTakeDirs } from "@/lib/asset";
 import { enqueueTask } from "@/lib/task-queue";
 import { generateId } from "@/lib/utils";
+import { normalizeShotStateById, recalculateEpisodeStage } from "@/lib/production-state";
 import type { AudioGenInput } from "./types";
 
 // ─── TTS Provider 抽象 ────────────────────────────────────────────────────────
@@ -114,10 +115,6 @@ function qaAudio(localPath: string): { verdict: string; score: number; details: 
   }
 }
 
-function getShotPipelineStage(hasVideo: boolean) {
-  return hasVideo ? "ready_for_export" : "audio_generating";
-}
-
 // ─── 主入口：为 Shot 生成对白音频 ────────────────────────────────────────────
 
 export interface GenerateAudioResult {
@@ -192,10 +189,8 @@ export async function generateShotAudio(input: AudioGenInput): Promise<GenerateA
     where: { id: shotId },
     data: {
       adoptedAudioTakeId: take.id,
-      pipelineStage: getShotPipelineStage(shot.hasMotionVideo),
       ...(qa.verdict === "fail"
         ? {
-            exportReadiness: "blocked",
             blockReason: "audio-qa-failed",
             blockMeta: JSON.stringify({
               code: "audio-qa-failed",
@@ -207,11 +202,12 @@ export async function generateShotAudio(input: AudioGenInput): Promise<GenerateA
             }),
           }
         : {
-            exportReadiness: shot.exportReadiness === "blocked" ? "blocked" : "ready",
             ...(shot.blockReason === "audio-qa-failed" ? { blockReason: "", blockMeta: "" } : {}),
           }),
     },
   });
+  await normalizeShotStateById(shotId);
+  await recalculateEpisodeStage(episodeId);
 
   await prisma.review.create({
     data: {

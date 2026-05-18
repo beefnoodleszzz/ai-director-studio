@@ -96,13 +96,11 @@ export interface ShotData {
   visualPrompt: string;
   audioPrompt: string;
   dialogue: string;
-  adoptedTakeId?: string | null;
   adoptedImageTakeId?: string | null;
   adoptedVideoTakeId?: string | null;
   adoptedAudioTakeId?: string | null;
-  status: string;
-  readiness: string;
   pipelineStage?: ShotPipelineStage | string | null;
+  exportReadiness?: "ready" | "warn" | "blocked" | string | null;
   blockReason?: string | null;
   blockMeta?: string | BlockMeta | null;
   takes: TakeData[];
@@ -261,7 +259,7 @@ function ShotCard({
   highlightReason,
   highlightRecommendation,
 }: ShotCardProps) {
-  const [expanded, setExpanded] = useState(isHighlighted);
+  const [expanded, setExpanded] = useState(() => isHighlighted);
   const [generatingImage, setGeneratingImage] = useState(false);
   const [generatingVideo, setGeneratingVideo] = useState(false);
   const [provider, setProvider] = useState("seedream");
@@ -290,12 +288,6 @@ function ShotCard({
     load();
     return () => { cancelled = true; };
   }, [projectId]);
-
-  useEffect(() => {
-    if (isHighlighted) {
-      setExpanded(true);
-    }
-  }, [isHighlighted]);
 
   const imageTakes = shot.takes.filter((t) => t.takeType === "image");
   const videoTakes = shot.takes.filter((t) => t.takeType === "video");
@@ -345,7 +337,7 @@ function ShotCard({
         episodeId,
         sceneId,
         shotId: shot.id,
-        adoptedTakeId: imageTake.id,
+        adoptedImageTakeId: imageTake.id,
         visualPrompt: shot.visualPrompt,
         provider: videoProvider,
       });
@@ -364,7 +356,6 @@ function ShotCard({
       await axios.post(`/api/shots/${shot.id}/adopt`, { takeId, takeType });
       onUpdate({
         ...shot,
-        adoptedTakeId: takeType === "image" ? takeId : shot.adoptedTakeId ?? null,
         adoptedImageTakeId: takeType === "image" ? takeId : adoptedImageTakeId,
         adoptedVideoTakeId: takeType === "video" ? takeId : adoptedVideoTakeId,
         adoptedAudioTakeId: takeType === "audio" ? takeId : adoptedAudioTakeId,
@@ -401,7 +392,7 @@ function ShotCard({
     <Card
       className={cn(
         "overflow-hidden",
-        shot.status === "error" && "border-destructive/40",
+        shot.exportReadiness === "blocked" && "border-destructive/40",
         shot.pipelineStage === "blocked_for_review" && "border-amber-500/40",
         isHighlighted && "ring-2 ring-primary border-primary/50"
       )}

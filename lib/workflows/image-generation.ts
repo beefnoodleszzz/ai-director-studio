@@ -19,6 +19,7 @@ import {
 import { enqueueTask, getCurrentTaskId } from "@/lib/task-queue";
 import { generateId } from "@/lib/utils";
 import { recommendProvider } from "@/lib/provider-recommender";
+import { normalizeShotStateById, recalculateEpisodeStage } from "@/lib/production-state";
 import type { ImageGenInput } from "./types";
 import { composeImagePrompt } from "@/lib/prompt-composer";
 import { generateShotVideoWithTask } from "./video-generation";
@@ -113,7 +114,7 @@ async function qaImage(localPath: string): Promise<{ score: number; verdict: str
   const qaBaseUrl = process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com/v1";
   const qaModel = process.env.VISION_QA_MODEL ?? "deepseek-chat";
 
-  if (!qaKey || !localPath) return { score: 0.7, verdict: "pass" };
+  if (!qaKey || !localPath) return { score: 0.3, verdict: "warn" };
 
   try {
     const fs = await import("fs");
@@ -151,7 +152,7 @@ async function qaImage(localPath: string): Promise<{ score: number; verdict: str
     const result = JSON.parse(jsonStr);
     return { score: result.score ?? 0.5, verdict: result.verdict ?? "pass" };
   } catch {
-    return { score: 0.6, verdict: "pass" };
+    return { score: 0.3, verdict: "warn" };
   }
 }
 
@@ -169,7 +170,7 @@ async function qaImageConsistency(input: {
   const qaModel = process.env.VISION_QA_MODEL ?? "deepseek-chat";
 
   if (!qaKey || !input.localPath) {
-    return { score: 0.75, verdict: "pass", failTags: [], details: "Consistency QA skipped (no API key)" };
+    return { score: 0.35, verdict: "warn", failTags: [], details: "Consistency QA unavailable" };
   }
 
   try {
@@ -225,7 +226,7 @@ async function qaImageConsistency(input: {
       details: Array.isArray(result.details) ? result.details.join("; ") : String(result.details ?? ""),
     };
   } catch {
-    return { score: 0.65, verdict: "pass", failTags: [], details: "Consistency QA fallback" };
+    return { score: 0.35, verdict: "warn", failTags: [], details: "Consistency QA fallback" };
   }
 }
 
@@ -244,7 +245,6 @@ export async function generateShotImages(input: ImageGenInput): Promise<Generate
   await prisma.shot.update({
     where: { id: shotId },
     data: {
-      status: "generating",
       pipelineStage: "image_generating",
       blockReason: "",
       blockMeta: "",
@@ -386,7 +386,7 @@ export async function generateShotImages(input: ImageGenInput): Promise<Generate
   if (results.length === 0) {
     await prisma.shot.update({
       where: { id: shotId },
-      data: { status: "error", pipelineStage: "draft" },
+      data: { pipelineStage: "draft" },
     });
     throw new Error(`All ${candidateCount} image generation attempts failed for shot ${shotId}`);
   }
@@ -398,23 +398,19 @@ export async function generateShotImages(input: ImageGenInput): Promise<Generate
     data: { isAdopted: false },
   });
   await prisma.take.update({ where: { id: best.takeId }, data: { isAdopted: true } });
-  const updatedShot = await prisma.shot.update({
+  await prisma.shot.update({
     where: { id: shotId },
     data: {
       adoptedImageTakeId: best.takeId,
       adoptedVideoTakeId: null,
-      status: "image_done",
-      readiness: "done",
-      hasMotionVideo: false,
-      exportReadiness: "ready",
-      fallbackMode: "none",
-      pipelineStage: "image_ready",
-      blockReason: "",
-      blockMeta: "",
+      adoptedAudioTakeId: null,
     },
   });
+  await normalizeShotStateById(shotId);
+  await recalculateEpisodeStage(episodeId);
 
-  if (updatedShot.autoContinue) {
+  const refreshedShot = await prisma.shot.findUnique({ where: { id: shotId }, select: { autoContinue: true } });
+  if (refreshedShot?.autoContinue) {
     await generateShotVideoWithTask({
       projectId,
       episodeId,
@@ -513,7 +509,20 @@ export async function generateShotImagesWithTask(input: ImageGenInput) {
       shotId: input.shotId,
       taskType: "image",
       taskStage: "image",
-      inputRef: { shotId: input.shotId, provider: input.provider },
+      inputRef: {
+        projectId: input.projectId,
+        episodeId: input.episodeId,
+        sceneId: input.sceneId,
+        shotId: input.shotId,
+        prompt: input.prompt,
+        refImageUrls: input.refImageUrls,
+        provider: input.provider,
+        candidateCount: input.candidateCount,
+        templateId: input.templateId,
+        characterConstraints: input.characterConstraints,
+        outputType: "image",
+        stage: "image",
+      },
     },
     () => generateShotImages(input)
   );

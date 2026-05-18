@@ -88,6 +88,13 @@ const suggestionLabels: Record<string, string> = {
   "change-provider": "换 Provider 重做",
 };
 
+const QA_TYPE_LABELS: Record<string, string> = {
+  all: "全部类型",
+  image: "首帧图像",
+  video: "视频",
+  audio: "音频",
+};
+
 export function QAPanel({ projectId, episodeId }: Props) {
   const [items, setItems] = useState<QAItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -141,7 +148,7 @@ export function QAPanel({ projectId, episodeId }: Props) {
           episodeId: item.episodeId,
           sceneId: item.sceneId,
           shotId: item.shotId,
-          adoptedTakeId: item.adoptedImageTakeId,
+          adoptedImageTakeId: item.adoptedImageTakeId,
           visualPrompt: item.visualPrompt,
           provider: item.take.provider,
         });
@@ -297,7 +304,9 @@ export function QAPanel({ projectId, episodeId }: Props) {
         {allFailTags.length > 0 && (
           <Select value={tagFilter} onValueChange={(v) => v && setTagFilter(v)}>
             <SelectTrigger className="w-40 h-8">
-              <SelectValue placeholder="问题类型" />
+              <SelectValue placeholder="问题类型">
+                {tagFilter === "all" ? "全部问题" : tagFilter}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">全部问题</SelectItem>
@@ -309,7 +318,9 @@ export function QAPanel({ projectId, episodeId }: Props) {
         )}
         <Select value={typeFilter} onValueChange={(v) => v && setTypeFilter(v)}>
           <SelectTrigger className="w-32 h-8">
-            <SelectValue placeholder="类型" />
+            <SelectValue placeholder="类型">
+              {QA_TYPE_LABELS[typeFilter] ?? typeFilter}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">全部类型</SelectItem>

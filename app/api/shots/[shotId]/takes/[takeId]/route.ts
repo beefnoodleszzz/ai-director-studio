@@ -11,6 +11,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { normalizeShotStateById } from "@/lib/production-state";
 
 export async function PATCH(
   req: NextRequest,
@@ -39,17 +40,18 @@ export async function PATCH(
 
       const clearPatch =
         take.takeType === "image"
-          ? { adoptedImageTakeId: null, pipelineStage: "draft" }
+          ? { adoptedImageTakeId: null }
           : take.takeType === "video"
-            ? { adoptedVideoTakeId: null, hasMotionVideo: false, pipelineStage: "image_ready" }
+            ? { adoptedVideoTakeId: null }
             : take.takeType === "audio"
-              ? { adoptedAudioTakeId: null, pipelineStage: "video_ready" }
+              ? { adoptedAudioTakeId: null }
               : {};
 
       await prisma.shot.update({
         where: { id: shotId },
         data: clearPatch,
       });
+      await normalizeShotStateById(shotId);
     }
 
     const updated = await prisma.take.update({

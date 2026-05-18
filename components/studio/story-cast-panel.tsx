@@ -123,7 +123,11 @@ export function StoryCastPanel({
               <Label>锁定唯一主角</Label>
               <Select value={leadCharacterId} onValueChange={(value) => onLeadChange(value ?? "")}>
                 <SelectTrigger>
-                  <SelectValue placeholder="请选择主角" />
+                  <SelectValue placeholder="请选择主角">
+                    {leadCharacterId
+                      ? characters.find((character) => character.id === leadCharacterId)?.name ?? "请选择主角"
+                      : "请选择主角"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {characters.map((character) => (

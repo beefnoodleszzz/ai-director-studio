@@ -4,6 +4,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { normalizeShotStateById, recalculateEpisodeStage } from "@/lib/production-state";
 
 export async function POST(
   req: NextRequest,
@@ -36,25 +37,25 @@ export async function POST(
 
     const shotPatch =
       resolvedTakeType === "image"
-        ? { adoptedImageTakeId: takeId, pipelineStage: "image_ready" }
+        ? { adoptedImageTakeId: takeId }
         : resolvedTakeType === "video"
-          ? { adoptedVideoTakeId: takeId, hasMotionVideo: true, pipelineStage: "video_ready" }
+          ? { adoptedVideoTakeId: takeId }
           : resolvedTakeType === "audio"
-            ? { adoptedAudioTakeId: takeId, pipelineStage: "ready_for_export" }
+            ? { adoptedAudioTakeId: takeId }
             : {};
 
-    await prisma.shot.update({
+    const shot = await prisma.shot.update({
       where: { id: shotId },
       data: shotPatch,
     });
+    const normalizedShot = await normalizeShotStateById(shotId);
+    await recalculateEpisodeStage(shot.sceneId);
 
     return NextResponse.json({
       success: true,
       takeId,
       takeType: resolvedTakeType,
-      adoptedImageTakeId: resolvedTakeType === "image" ? takeId : undefined,
-      adoptedVideoTakeId: resolvedTakeType === "video" ? takeId : undefined,
-      adoptedAudioTakeId: resolvedTakeType === "audio" ? takeId : undefined,
+      shotState: normalizedShot,
     });
   } catch (err) {
     console.error("[POST /api/shots/:shotId/adopt]", err);

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { lockProjectCast } from "@/lib/workflows/story-workflow";
 import { prisma } from "@/lib/prisma";
+import { deriveProjectProgress } from "@/lib/production-state";
 
 export async function POST(
   req: NextRequest,
@@ -17,7 +18,7 @@ export async function POST(
     const project = await prisma.project.findUnique({
       where: { id: projectId },
       select: {
-        productionStage: true,
+        episodes: { select: { id: true, productionStage: true } },
         characters: {
           orderBy: { createdAt: "asc" },
           select: {
@@ -37,7 +38,7 @@ export async function POST(
 
     return NextResponse.json({
       ok: true,
-      productionStage: project?.productionStage ?? "idea",
+      progress: deriveProjectProgress(project?.episodes ?? []),
       characters: project?.characters ?? [],
       leadCharacterId: project?.characters.find((character) => character.isLead)?.id ?? null,
     });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { removePublicUrlIfExists } from "@/lib/asset";
+import { normalizeShotStateById } from "@/lib/production-state";
 import { parseBlockMeta } from "@/lib/studio-contracts";
 
 export async function PATCH(
@@ -11,7 +12,6 @@ export async function PATCH(
     const { shotId } = await params;
     const body = (await req.json()) as {
       autoContinue?: boolean;
-      pipelineStage?: string;
       clearBlock?: boolean;
     };
 
@@ -22,27 +22,22 @@ export async function PATCH(
       where: { id: shotId },
       data: {
         ...(body.autoContinue !== undefined ? { autoContinue: body.autoContinue } : {}),
-        ...(body.pipelineStage !== undefined ? { pipelineStage: body.pipelineStage } : {}),
         ...(body.clearBlock
           ? {
               blockReason: "",
               blockMeta: "",
-              pipelineStage: shot.adoptedVideoTakeId
-                ? "video_ready"
-                : shot.adoptedImageTakeId
-                  ? "image_ready"
-                  : "draft",
             }
           : {}),
       },
     });
+    const normalizedShot = body.clearBlock ? await normalizeShotStateById(shotId) : updated;
 
     return NextResponse.json({
-      id: updated.id,
-      autoContinue: updated.autoContinue,
-      pipelineStage: updated.pipelineStage,
-      blockReason: updated.blockReason,
-      blockMeta: parseBlockMeta(updated.blockMeta),
+      id: normalizedShot.id,
+      autoContinue: normalizedShot.autoContinue,
+      pipelineStage: normalizedShot.pipelineStage,
+      blockReason: normalizedShot.blockReason,
+      blockMeta: parseBlockMeta(normalizedShot.blockMeta),
     });
   } catch (err) {
     console.error("[PATCH /api/shots/:shotId]", err);

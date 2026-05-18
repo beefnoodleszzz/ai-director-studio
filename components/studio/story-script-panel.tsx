@@ -3,7 +3,6 @@
 import { FileText, Loader2, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,7 +16,6 @@ interface EpisodeLite {
   hook: string;
   cliffhanger: string;
   scriptDraft?: string;
-  productionStage?: string;
 }
 
 interface ScriptSections {
@@ -77,6 +75,13 @@ export function StoryScriptPanel({
   onSave,
   onBreakdown,
 }: StoryScriptPanelProps) {
+  const selectedEpisodeLabel = selectedEpisodeId
+    ? (() => {
+        const matchedEpisode = episodes.find((episode) => episode.id === selectedEpisodeId);
+        return matchedEpisode ? matchedEpisode.title || `第 ${matchedEpisode.episodeNum} 集` : "请选择剧集";
+      })()
+    : "请选择剧集";
+
   return (
     <Card id="script-section">
       <CardHeader className="pb-4">
@@ -94,7 +99,9 @@ export function StoryScriptPanel({
             <Label>选择剧集</Label>
             <Select value={selectedEpisodeId} onValueChange={(value) => onEpisodeChange(value ?? "")}>
               <SelectTrigger>
-                <SelectValue placeholder="请选择剧集" />
+                <SelectValue placeholder="请选择剧集">
+                  {selectedEpisodeLabel}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {episodes.map((episode) => (

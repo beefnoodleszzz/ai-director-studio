@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { deriveProjectProgress, recalculateEpisodeStage } from "@/lib/production-state";
 
 async function buildCastPayload(projectId: string) {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     select: {
       id: true,
-      productionStage: true,
       storyOutline: true,
+      episodes: { select: { id: true, productionStage: true } },
       characters: {
         orderBy: { createdAt: "asc" },
         select: {
@@ -31,7 +32,7 @@ async function buildCastPayload(projectId: string) {
 
   return {
     id: project.id,
-    productionStage: project.productionStage,
+    progress: deriveProjectProgress(project.episodes),
     storyOutline: project.storyOutline,
     leadCharacterId: project.characters.find((character) => character.isLead)?.id ?? null,
     characters: project.characters,
@@ -64,7 +65,6 @@ export async function PATCH(
     const { id: projectId } = await params;
     const body = (await req.json()) as {
       leadCharacterId?: string;
-      productionStage?: string;
       characters?: Array<{
         id: string;
         role?: string;
@@ -129,13 +129,12 @@ export async function PATCH(
         });
       }
 
-      if (body.productionStage) {
-        await tx.project.update({
-          where: { id: projectId },
-          data: { productionStage: body.productionStage },
-        });
-      }
     });
+    const episodes = await prisma.episode.findMany({
+      where: { projectId },
+      select: { id: true },
+    });
+    await Promise.all(episodes.map((episode) => recalculateEpisodeStage(episode.id)));
 
     const payload = await buildCastPayload(projectId);
     if (!payload) {
