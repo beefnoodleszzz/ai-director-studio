@@ -51,9 +51,9 @@ export async function POST(req: NextRequest) {
           episodeId,
           sceneId,
           shotId,
-          adoptedTakeId: adoptedTake.id,
+          adoptedImageTakeId: adoptedTake.id,
           visualPrompt: shot?.visualPrompt ?? input.prompt ?? "",
-          provider: provider ?? "kling",
+          provider: provider ?? "seedance",
         });
         newTaskId = res.taskId;
         break;
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
           shotId,
           dialogue: shot?.dialogue ?? "",
           audioPrompt: shot?.audioPrompt ?? "",
-          provider: provider ?? "minimax",
+          provider: provider ?? "doubao-tts",
         });
         newTaskId = res.taskId;
         break;

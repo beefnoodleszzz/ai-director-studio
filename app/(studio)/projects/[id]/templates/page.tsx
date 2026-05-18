@@ -4,7 +4,6 @@ import { use, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -19,6 +18,10 @@ import {
   PromptTemplateEditor,
   type PromptTemplate,
 } from "@/components/studio/PromptTemplateEditor";
+import { ProjectPageShell } from "@/components/studio/ProjectPageShell";
+import { SectionHeading } from "@/components/studio/SectionHeading";
+import { EmptyState } from "@/components/studio/EmptyState";
+import { FormActionBar } from "@/components/studio/FormActionBar";
 
 const CATEGORY_LABELS: Record<string, string> = {
   image: "图像",
@@ -121,17 +124,12 @@ export default function TemplatesPage({
   }, {});
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <FileText className="size-6" /> Prompt 模板库
-          </h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            结构化 Prompt 模板可跨集复用，告别每次从零手写
-          </p>
-        </div>
-        <div className="flex gap-2">
+    <ProjectPageShell
+      title="Prompt 模板库"
+      description="结构化 Prompt 模板可跨集复用，让图像、视频、音频与剧本生成保持一致的指令风格。"
+      backHref={`/projects/${projectId}`}
+      actions={
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={openGlobalLibrary}>
             <Globe className="size-4 mr-1.5" /> 全局库导入
           </Button>
@@ -139,27 +137,30 @@ export default function TemplatesPage({
             <Plus className="size-4 mr-1.5" /> 新建模板
           </Button>
         </div>
-      </div>
+      }
+    >
 
       {loading ? (
         <p className="text-muted-foreground text-sm">加载中…</p>
       ) : templates.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-16 gap-3">
-            <FileText className="size-10 text-muted-foreground/40" />
-            <p className="text-muted-foreground">还没有模板</p>
+        <EmptyState
+          title="还没有模板"
+          description="创建结构化 Prompt 模板，减少跨集重复手写。"
+          icon={FileText}
+          action={
             <Button variant="outline" onClick={openCreate}>
               <Plus className="size-4 mr-1.5" /> 创建第一个模板
             </Button>
-          </CardContent>
-        </Card>
+          }
+        />
       ) : (
         Object.entries(grouped).map(([cat, items]) => (
           <div key={cat} className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Badge variant="outline">{CATEGORY_LABELS[cat] ?? cat}</Badge>
-              <Separator className="flex-1" />
-            </div>
+            <SectionHeading
+              title={CATEGORY_LABELS[cat] ?? cat}
+              description={`当前分组包含 ${items.length} 个模板。`}
+              className="border-b border-border/50 pb-3"
+            />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {items.map((t) => (
                 <Card key={t.id} className={t.isActive ? "" : "opacity-50"}>
@@ -224,7 +225,13 @@ export default function TemplatesPage({
             </DialogTitle>
           </DialogHeader>
           {globalTemplates.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">全局库暂无模板</p>
+            <EmptyState
+              title="全局库暂无模板"
+              description="当前没有可导入的共享模板。"
+              icon={Globe}
+              variant="inline"
+              className="border-none bg-transparent px-0 py-8"
+            />
           ) : (
             <div className="space-y-2">
               {globalTemplates.map((t) => (
@@ -250,18 +257,18 @@ export default function TemplatesPage({
               ))}
             </div>
           )}
-          <div className="flex justify-end gap-2 mt-2">
+          <FormActionBar className="mt-2 px-0 pb-0">
             <Button variant="outline" onClick={() => setGlobalDialogOpen(false)}>取消</Button>
             <Button onClick={handleCloneGlobal} disabled={cloning || !selectedGlobal.size}>
               <Download className="size-4 mr-1.5" />
               {cloning ? "导入中…" : `导入选中 (${selectedGlobal.size})`}
             </Button>
-          </div>
+          </FormActionBar>
         </DialogContent>
       </Dialog>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? "编辑模板" : "新建模板"}</DialogTitle>
           </DialogHeader>
@@ -273,6 +280,6 @@ export default function TemplatesPage({
           />
         </DialogContent>
       </Dialog>
-    </div>
+    </ProjectPageShell>
   );
 }

@@ -33,7 +33,11 @@ export async function POST(req: NextRequest) {
       provider: body.provider,
     });
 
-    return NextResponse.json({ taskId, ...result });
+    return NextResponse.json({
+      taskId,
+      ...result,
+      adoptedAudioTakeId: result.takeId,
+    });
   } catch (err) {
     console.error("[api/generate/audio]", err);
     return NextResponse.json({ error: "Audio generation failed" }, { status: 500 });

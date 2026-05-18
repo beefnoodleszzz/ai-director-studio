@@ -8,11 +8,12 @@ export async function POST(req: NextRequest) {
       episodeId: string;
       projectId: string;
       script: string;
+      source?: "generated-script" | "manual-script";
       // 当 status === NEED_CHARACTER_SETUP 后，前端补完角色再调用，携带 pendingData
       pendingData?: ScriptBreakdownResult;
     };
 
-    const { episodeId, projectId, script, pendingData } = body;
+    const { episodeId, projectId, script, pendingData, source = "manual-script" } = body;
 
     if (!episodeId || !projectId) {
       return NextResponse.json({ error: "episodeId and projectId are required" }, { status: 400 });
@@ -28,8 +29,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "script is required" }, { status: 400 });
     }
 
+    if (source === "generated-script") {
+      const episode = await import("@/lib/prisma").then(({ prisma }) =>
+        prisma.episode.findUnique({ where: { id: episodeId } })
+      );
+      if (!episode?.scriptDraft) {
+        return NextResponse.json({ error: "No generated script draft found" }, { status: 422 });
+      }
+    }
+
     const result = await breakdownScriptWithTask({ projectId, episodeId, script });
-    return NextResponse.json(result);
+    return NextResponse.json({
+      source,
+      ...result,
+    });
   } catch (err) {
     console.error("[api/generate/script]", err);
     return NextResponse.json({ error: "Script breakdown failed" }, { status: 500 });

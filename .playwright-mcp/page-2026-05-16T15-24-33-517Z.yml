@@ -1,0 +1,45 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e6]:
+      - link "AI Director Studio v0.1" [ref=e8] [cursor=pointer]:
+        - /url: /
+        - img [ref=e10]
+        - generic [ref=e15]:
+          - paragraph [ref=e16]: AI Director
+          - paragraph [ref=e17]: Studio v0.1
+      - separator [ref=e18]
+      - generic [ref=e19]:
+        - list [ref=e21]:
+          - listitem [ref=e22]:
+            - link "所有项目" [ref=e23] [cursor=pointer]:
+              - /url: /
+              - img [ref=e24]
+              - generic [ref=e27]: 所有项目
+        - generic [ref=e28]:
+          - generic [ref=e29]: 最近项目
+          - list [ref=e31]:
+            - paragraph [ref=e32]: 暂无项目
+      - generic [ref=e34]: AI Director Studio v0.1.0
+    - generic [ref=e35]:
+      - banner [ref=e36]:
+        - button "Toggle Sidebar" [ref=e37]:
+          - img
+          - generic [ref=e38]: Toggle Sidebar
+        - separator [ref=e39]
+        - generic [ref=e40]:
+          - img [ref=e41]
+          - generic [ref=e43]: 选择项目
+      - main [ref=e44]:
+        - generic [ref=e45]:
+          - generic [ref=e47]:
+            - link [ref=e48] [cursor=pointer]:
+              - /url: /projects/784ad742-6286-450e-832c-3aed30c50058
+              - button [ref=e49]:
+                - img
+            - generic [ref=e50]:
+              - heading "风格圣经" [level=1] [ref=e51]
+              - paragraph [ref=e52]: 统一项目的视觉基调、镜头偏好、负面词和版式倾向，保证整条产线输出风格稳定。
+          - img [ref=e55]
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e62] [cursor=pointer]:
+    - img [ref=e63]

@@ -8,10 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Wand2, Loader2, Clapperboard, ArrowRight, AlertCircle } from "lucide-react";
+import { Wand2, Loader2, Clapperboard, ArrowRight, AlertCircle } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
 import { EmotionCurveEditor } from "@/components/studio/EmotionCurveEditor";
+import { ProjectPageShell } from "@/components/studio/ProjectPageShell";
+import { SectionHeading } from "@/components/studio/SectionHeading";
 
 interface Shot {
   id: string;
@@ -111,23 +113,22 @@ export default function EpisodeDetailPage({
     }
   };
 
-  if (loading) return <div className="flex justify-center py-16"><Loader2 className="size-8 animate-spin text-muted-foreground" /></div>;
-  if (!episode) return <div className="p-6 text-center text-muted-foreground">集数不存在</div>;
+  if (loading) return <div className="app-page-narrow py-16 flex justify-center"><Loader2 className="size-8 animate-spin text-muted-foreground" /></div>;
+  if (!episode) return <div className="app-page-narrow py-8 text-center text-muted-foreground">集数不存在</div>;
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center gap-3">
-        <Link href={`/projects/${projectId}/episodes`}>
-          <Button variant="ghost" size="icon" className="size-8"><ArrowLeft className="size-4" /></Button>
-        </Link>
-        <div>
-          <h1 className="text-xl font-bold">{episode.title || `第 ${episode.episodeNum} 集`}</h1>
-          {episode.summary && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{episode.summary}</p>}
-        </div>
-        <Badge variant={episode.status === "completed" ? "default" : episode.status === "in-progress" ? "secondary" : "outline"} className="ml-auto">
+    <ProjectPageShell
+      title={episode.title || `第 ${episode.episodeNum} 集`}
+      description={episode.summary || "录入剧本、拆解场次，并进入每个场次的镜头工作台。"}
+      backHref={`/projects/${projectId}/episodes`}
+      contentClassName="app-page-narrow"
+      stickyHeader
+      actions={
+        <Badge variant={episode.status === "completed" ? "default" : episode.status === "in-progress" ? "secondary" : "outline"} className="mt-1">
           {episode.status === "completed" ? "已完成" : episode.status === "in-progress" ? "制作中" : "草稿"}
         </Badge>
-      </div>
+      }
+    >
 
       {/* 新角色拦截提示 */}
       {newCharacters.length > 0 && (
@@ -162,9 +163,13 @@ export default function EpisodeDetailPage({
       {episode.scenes.length === 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">输入剧本，拆解为场次和镜头</CardTitle>
+            <CardTitle className="text-base">手动剧本入口（高级模式）</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="rounded-xl border border-border/60 bg-muted/20 px-3 py-3 text-sm text-muted-foreground">
+              推荐优先使用“故事工作台”完成 AI 大纲、主角锁定、角色确认和剧本正文生成。
+              这里保留给需要直接粘贴剧本并手动拆解的高级用法。
+            </div>
             <div className="space-y-1.5">
               <Label>剧本内容</Label>
               <Textarea
@@ -186,11 +191,11 @@ export default function EpisodeDetailPage({
       {/* 场次列表 */}
       {episode.scenes.length > 0 && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">
-              {episode.scenes.length} 个场次 · {episode.scenes.flatMap((s) => s.shots).length} 个镜头
-            </h2>
-          </div>
+          <SectionHeading
+            eyebrow="场次"
+            title={`${episode.scenes.length} 个场次`}
+            description={`共 ${episode.scenes.flatMap((s) => s.shots).length} 个镜头。逐场进入镜头工作台继续生产。`}
+          />
           {episode.scenes.map((scene) => (
             <Card key={scene.id} className="overflow-hidden">
               <CardHeader className="py-3 px-4 bg-muted/30 border-b">
@@ -246,7 +251,11 @@ export default function EpisodeDetailPage({
         <>
           <Separator />
           <section className="space-y-3">
-            <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">情绪曲线</h2>
+            <SectionHeading
+              eyebrow="节奏"
+              title="情绪曲线"
+              description="对各场次的情绪强度进行整体校准，保证叙事张力顺滑递进。"
+            />
             <EmotionCurveEditor
               projectId={projectId}
               episodeId={epId}
@@ -265,8 +274,11 @@ export default function EpisodeDetailPage({
       {/* 重新拆解 */}
       {episode.scenes.length > 0 && (
         <div className="space-y-3">
-          <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">重新拆解剧本</h2>
-          <p className="text-xs text-muted-foreground">重新拆解将清空当前所有场次和镜头数据（已生成的 Take 会保留在文件系统中）。</p>
+          <SectionHeading
+            eyebrow="修订"
+            title="重新拆解剧本"
+            description="重新拆解将清空当前所有场次和镜头数据，已生成的 Take 仍会保留在文件系统中。"
+          />
           <div className="space-y-2">
             <Textarea
               value={script}
@@ -282,6 +294,6 @@ export default function EpisodeDetailPage({
           </div>
         </div>
       )}
-    </div>
+    </ProjectPageShell>
   );
 }

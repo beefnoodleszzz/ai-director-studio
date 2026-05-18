@@ -68,9 +68,9 @@ export async function POST(
             episodeId: epId,
             sceneId: scId,
             shotId,
-            adoptedTakeId: adoptedImageTake.id,
+            adoptedImageTakeId: adoptedImageTake.id,
             visualPrompt: shot.visualPrompt ?? "",
-            provider: provider ?? take.provider ?? "kling",
+            provider: provider ?? take.provider ?? "seedance",
           });
           taskIds.push(taskId);
         } else if (take.takeType === "audio") {
@@ -81,7 +81,7 @@ export async function POST(
             shotId,
             dialogue: shot.dialogue,
             audioPrompt: shot.audioPrompt,
-            provider: provider ?? take.provider ?? "minimax",
+            provider: provider ?? take.provider ?? "doubao-tts",
           });
           taskIds.push(taskId);
         }

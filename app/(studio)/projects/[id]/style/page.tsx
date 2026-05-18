@@ -2,11 +2,10 @@
 
 import { use, useEffect, useState } from "react";
 import { StyleBibleEditor, type StyleBibleData } from "@/components/studio/StyleBibleEditor";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft, Loader2 } from "lucide-react";
-import Link from "next/link";
+import { Loader2 } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
+import { ProjectPageShell } from "@/components/studio/ProjectPageShell";
 
 export default function StyleBiblePage({ params }: { params: Promise<{ id: string }> }) {
   const { id: projectId } = use(params);
@@ -37,16 +36,12 @@ export default function StyleBiblePage({ params }: { params: Promise<{ id: strin
   };
 
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-6">
-      <div className="flex items-center gap-3">
-        <Link href={`/projects/${projectId}`}>
-          <Button variant="ghost" size="icon" className="size-8">
-            <ArrowLeft className="size-4" />
-          </Button>
-        </Link>
-        <h1 className="text-xl font-bold">风格圣经</h1>
-      </div>
-
+    <ProjectPageShell
+      title="风格圣经"
+      description="统一项目的视觉基调、镜头偏好、负面词和版式倾向，保证整条产线输出风格稳定。"
+      backHref={`/projects/${projectId}`}
+      contentClassName="app-page-reading"
+    >
       {loading ? (
         <div className="flex justify-center py-16">
           <Loader2 className="size-8 animate-spin text-muted-foreground" />
@@ -54,6 +49,6 @@ export default function StyleBiblePage({ params }: { params: Promise<{ id: strin
       ) : styleBible ? (
         <StyleBibleEditor projectId={projectId} initialData={styleBible} onSave={handleSave} />
       ) : null}
-    </div>
+    </ProjectPageShell>
   );
 }

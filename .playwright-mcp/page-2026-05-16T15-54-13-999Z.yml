@@ -1,0 +1,877 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e6]:
+      - link "AI Director Studio v0.1" [ref=e8] [cursor=pointer]:
+        - /url: /
+        - img [ref=e10]
+        - generic [ref=e15]:
+          - paragraph [ref=e16]: AI Director
+          - paragraph [ref=e17]: Studio v0.1
+      - separator [ref=e18]
+      - generic [ref=e19]:
+        - list [ref=e21]:
+          - listitem [ref=e22]:
+            - link "所有项目" [ref=e23] [cursor=pointer]:
+              - /url: /
+              - img [ref=e24]
+              - generic [ref=e27]: 所有项目
+        - generic [ref=e28]:
+          - generic [ref=e29]: 最近项目
+          - list [ref=e31]:
+            - paragraph [ref=e32]: 暂无项目
+      - generic [ref=e34]: AI Director Studio v0.1.0
+    - generic [ref=e35]:
+      - banner [ref=e36]:
+        - button "Toggle Sidebar" [ref=e37]:
+          - img
+          - generic [ref=e38]: Toggle Sidebar
+        - separator [ref=e39]
+        - generic [ref=e40]:
+          - img [ref=e41]
+          - generic [ref=e43]: 选择项目
+        - button "切换到深色模式" [ref=e45]:
+          - img
+          - generic [ref=e46]: 浅色
+      - main [ref=e47]:
+        - generic [ref=e48]:
+          - generic [ref=e50]:
+            - link [ref=e51] [cursor=pointer]:
+              - /url: /projects/784ad742-6286-450e-832c-3aed30c50058
+              - button [ref=e52]:
+                - img
+            - generic [ref=e53]:
+              - heading "任务中心" [level=1] [ref=e54]
+              - paragraph [ref=e55]: 集中查看所有生成任务的状态、重试记录和输出结果。任务记录持久化，重启后不会丢。
+          - generic [ref=e57]:
+            - generic [ref=e58]:
+              - generic [ref=e60]:
+                - paragraph [ref=e61]: "70"
+                - paragraph [ref=e62]: 总任务
+              - generic [ref=e64]:
+                - paragraph [ref=e65]: "0"
+                - paragraph [ref=e66]: 活跃中
+              - generic [ref=e68]:
+                - paragraph [ref=e69]: "16"
+                - paragraph [ref=e70]: 失败
+              - generic [ref=e72]:
+                - paragraph [ref=e73]: "0"
+                - paragraph [ref=e74]: 待复核
+            - generic [ref=e75]:
+              - generic [ref=e76]:
+                - img [ref=e77]
+                - generic [ref=e79]: "并发数: 2"
+              - generic [ref=e80]:
+                - img [ref=e81]
+                - generic [ref=e84]: "队列: 0"
+              - generic [ref=e85]:
+                - img [ref=e86]
+                - generic [ref=e88]: "运行: 0"
+              - button "刷新" [ref=e89]:
+                - img
+                - text: 刷新
+            - separator [ref=e90]
+            - generic [ref=e91]:
+              - generic [ref=e92] [cursor=pointer]: 全部
+              - generic [ref=e93] [cursor=pointer]: 运行中
+              - generic [ref=e94] [cursor=pointer]: 等待中
+              - generic [ref=e95] [cursor=pointer]: 失败
+              - generic [ref=e96] [cursor=pointer]: 已完成
+              - generic [ref=e97] [cursor=pointer]: 已取消
+            - generic [ref=e98]:
+              - generic [ref=e100] [cursor=pointer]:
+                - generic [ref=e101]:
+                  - img [ref=e102]
+                  - text: 已完成
+                - generic [ref=e105]: 合成成片
+                - paragraph [ref=e107]: 尝试 1/3 次
+                - generic [ref=e108]: 大约 7 小时前
+                - generic [ref=e109]:
+                  - button [ref=e110]:
+                    - img
+                  - img [ref=e111]
+              - generic [ref=e114] [cursor=pointer]:
+                - generic [ref=e115]:
+                  - img [ref=e116]
+                  - text: 重试中
+                - generic [ref=e121]: 视频生成
+                - paragraph [ref=e123]: "Hailuo API error 1008: insufficient balance"
+                - generic [ref=e124]: 大约 7 小时前
+                - img [ref=e126]
+              - generic [ref=e129] [cursor=pointer]:
+                - generic [ref=e130]:
+                  - img [ref=e131]
+                  - text: 重试中
+                - generic [ref=e136]: 视频生成
+                - paragraph [ref=e138]: "Hailuo API error 1008: insufficient balance"
+                - generic [ref=e139]: 大约 7 小时前
+                - img [ref=e141]
+              - generic [ref=e144] [cursor=pointer]:
+                - generic [ref=e145]:
+                  - img [ref=e146]
+                  - text: 重试中
+                - generic [ref=e151]: 视频生成
+                - paragraph [ref=e153]: "Hailuo API error 1008: insufficient balance"
+                - generic [ref=e154]: 大约 7 小时前
+                - img [ref=e156]
+              - generic [ref=e159] [cursor=pointer]:
+                - generic [ref=e160]:
+                  - img [ref=e161]
+                  - text: 已完成
+                - generic [ref=e164]: 视频生成
+                - paragraph [ref=e166]: 尝试 1/3 次
+                - generic [ref=e167]: 大约 7 小时前
+                - generic [ref=e168]:
+                  - button [ref=e169]:
+                    - img
+                  - img [ref=e170]
+              - generic [ref=e173] [cursor=pointer]:
+                - generic [ref=e174]:
+                  - img [ref=e175]
+                  - text: 已完成
+                - generic [ref=e178]: 视频生成
+                - paragraph [ref=e180]: 尝试 1/3 次
+                - generic [ref=e181]: 大约 7 小时前
+                - generic [ref=e182]:
+                  - button [ref=e183]:
+                    - img
+                  - img [ref=e184]
+              - generic [ref=e187] [cursor=pointer]:
+                - generic [ref=e188]:
+                  - img [ref=e189]
+                  - text: 已完成
+                - generic [ref=e192]: 视频生成
+                - paragraph [ref=e194]: 尝试 1/3 次
+                - generic [ref=e195]: 大约 7 小时前
+                - generic [ref=e196]:
+                  - button [ref=e197]:
+                    - img
+                  - img [ref=e198]
+              - generic [ref=e201] [cursor=pointer]:
+                - generic [ref=e202]:
+                  - img [ref=e203]
+                  - text: 已完成
+                - generic [ref=e206]: 视频生成
+                - paragraph [ref=e208]: 尝试 1/3 次
+                - generic [ref=e209]: 大约 7 小时前
+                - generic [ref=e210]:
+                  - button [ref=e211]:
+                    - img
+                  - img [ref=e212]
+              - generic [ref=e215] [cursor=pointer]:
+                - generic [ref=e216]:
+                  - img [ref=e217]
+                  - text: 已完成
+                - generic [ref=e220]: 视频生成
+                - paragraph [ref=e222]: 尝试 1/3 次
+                - generic [ref=e223]: 大约 7 小时前
+                - generic [ref=e224]:
+                  - button [ref=e225]:
+                    - img
+                  - img [ref=e226]
+              - generic [ref=e229] [cursor=pointer]:
+                - generic [ref=e230]:
+                  - img [ref=e231]
+                  - text: 失败
+                - generic [ref=e233]: 视频生成
+                - paragraph [ref=e235]: 应用重启导致任务中断，请在任务中心手动重试
+                - generic [ref=e236]: 大约 7 小时前
+                - generic [ref=e237]:
+                  - button [ref=e238]:
+                    - img
+                  - button [ref=e239]:
+                    - img
+                  - img [ref=e240]
+              - generic [ref=e243] [cursor=pointer]:
+                - generic [ref=e244]:
+                  - img [ref=e245]
+                  - text: 已完成
+                - generic [ref=e248]: 视频生成
+                - paragraph [ref=e250]: 尝试 1/3 次
+                - generic [ref=e251]: 大约 7 小时前
+                - generic [ref=e252]:
+                  - button [ref=e253]:
+                    - img
+                  - img [ref=e254]
+              - generic [ref=e257] [cursor=pointer]:
+                - generic [ref=e258]:
+                  - img [ref=e259]
+                  - text: 已完成
+                - generic [ref=e262]: 视频生成
+                - paragraph [ref=e264]: 尝试 1/3 次
+                - generic [ref=e265]: 大约 7 小时前
+                - generic [ref=e266]:
+                  - button [ref=e267]:
+                    - img
+                  - img [ref=e268]
+              - generic [ref=e271] [cursor=pointer]:
+                - generic [ref=e272]:
+                  - img [ref=e273]
+                  - text: 已完成
+                - generic [ref=e276]: 视频生成
+                - paragraph [ref=e278]: 尝试 1/3 次
+                - generic [ref=e279]: 大约 7 小时前
+                - generic [ref=e280]:
+                  - button [ref=e281]:
+                    - img
+                  - img [ref=e282]
+              - generic [ref=e285] [cursor=pointer]:
+                - generic [ref=e286]:
+                  - img [ref=e287]
+                  - text: 已完成
+                - generic [ref=e290]: 视频生成
+                - paragraph [ref=e292]: 尝试 1/3 次
+                - generic [ref=e293]: 大约 7 小时前
+                - generic [ref=e294]:
+                  - button [ref=e295]:
+                    - img
+                  - img [ref=e296]
+              - generic [ref=e299] [cursor=pointer]:
+                - generic [ref=e300]:
+                  - img [ref=e301]
+                  - text: 已完成
+                - generic [ref=e304]: 视频生成
+                - paragraph [ref=e306]: 尝试 1/3 次
+                - generic [ref=e307]: 大约 7 小时前
+                - generic [ref=e308]:
+                  - button [ref=e309]:
+                    - img
+                  - img [ref=e310]
+              - generic [ref=e313] [cursor=pointer]:
+                - generic [ref=e314]:
+                  - img [ref=e315]
+                  - text: 失败
+                - generic [ref=e317]: 视频生成
+                - paragraph [ref=e319]: 应用重启导致任务中断，请在任务中心手动重试
+                - generic [ref=e320]: 大约 7 小时前
+                - generic [ref=e321]:
+                  - button [ref=e322]:
+                    - img
+                  - button [ref=e323]:
+                    - img
+                  - img [ref=e324]
+              - generic [ref=e327] [cursor=pointer]:
+                - generic [ref=e328]:
+                  - img [ref=e329]
+                  - text: 失败
+                - generic [ref=e331]: 视频生成
+                - paragraph [ref=e333]: 应用重启导致任务中断，请在任务中心手动重试
+                - generic [ref=e334]: 大约 7 小时前
+                - generic [ref=e335]:
+                  - button [ref=e336]:
+                    - img
+                  - button [ref=e337]:
+                    - img
+                  - img [ref=e338]
+              - generic [ref=e341] [cursor=pointer]:
+                - generic [ref=e342]:
+                  - img [ref=e343]
+                  - text: 失败
+                - generic [ref=e345]: 视频生成
+                - paragraph [ref=e347]: 应用重启导致任务中断，请在任务中心手动重试
+                - generic [ref=e348]: 大约 7 小时前
+                - generic [ref=e349]:
+                  - button [ref=e350]:
+                    - img
+                  - button [ref=e351]:
+                    - img
+                  - img [ref=e352]
+              - generic [ref=e355] [cursor=pointer]:
+                - generic [ref=e356]:
+                  - img [ref=e357]
+                  - text: 失败
+                - generic [ref=e359]: 视频生成
+                - paragraph [ref=e361]: 应用重启导致任务中断，请在任务中心手动重试
+                - generic [ref=e362]: 大约 8 小时前
+                - generic [ref=e363]:
+                  - button [ref=e364]:
+                    - img
+                  - button [ref=e365]:
+                    - img
+                  - img [ref=e366]
+              - generic [ref=e369] [cursor=pointer]:
+                - generic [ref=e370]:
+                  - img [ref=e371]
+                  - text: 失败
+                - generic [ref=e373]: 视频生成
+                - paragraph [ref=e375]: 应用重启导致任务中断，请在任务中心手动重试
+                - generic [ref=e376]: 大约 8 小时前
+                - generic [ref=e377]:
+                  - button [ref=e378]:
+                    - img
+                  - button [ref=e379]:
+                    - img
+                  - img [ref=e380]
+              - generic [ref=e383] [cursor=pointer]:
+                - generic [ref=e384]:
+                  - img [ref=e385]
+                  - text: 已完成
+                - generic [ref=e388]: 视频生成
+                - paragraph [ref=e390]: 尝试 1/3 次
+                - generic [ref=e391]: 大约 8 小时前
+                - generic [ref=e392]:
+                  - button [ref=e393]:
+                    - img
+                  - img [ref=e394]
+              - generic [ref=e397] [cursor=pointer]:
+                - generic [ref=e398]:
+                  - img [ref=e399]
+                  - text: 失败
+                - generic [ref=e401]: 视频生成
+                - paragraph [ref=e403]: 应用重启导致任务中断，请在任务中心手动重试
+                - generic [ref=e404]: 大约 8 小时前
+                - generic [ref=e405]:
+                  - button [ref=e406]:
+                    - img
+                  - button [ref=e407]:
+                    - img
+                  - img [ref=e408]
+              - generic [ref=e411] [cursor=pointer]:
+                - generic [ref=e412]:
+                  - img [ref=e413]
+                  - text: 已完成
+                - generic [ref=e416]: 视频生成
+                - paragraph [ref=e418]: 尝试 1/3 次
+                - generic [ref=e419]: 大约 8 小时前
+                - generic [ref=e420]:
+                  - button [ref=e421]:
+                    - img
+                  - img [ref=e422]
+              - generic [ref=e425] [cursor=pointer]:
+                - generic [ref=e426]:
+                  - img [ref=e427]
+                  - text: 已完成
+                - generic [ref=e430]: 视频生成
+                - paragraph [ref=e432]: 尝试 1/3 次
+                - generic [ref=e433]: 大约 8 小时前
+                - generic [ref=e434]:
+                  - button [ref=e435]:
+                    - img
+                  - img [ref=e436]
+              - generic [ref=e439] [cursor=pointer]:
+                - generic [ref=e440]:
+                  - img [ref=e441]
+                  - text: 已完成
+                - generic [ref=e444]: 视频生成
+                - paragraph [ref=e446]: 尝试 1/3 次
+                - generic [ref=e447]: 大约 8 小时前
+                - generic [ref=e448]:
+                  - button [ref=e449]:
+                    - img
+                  - img [ref=e450]
+              - generic [ref=e453] [cursor=pointer]:
+                - generic [ref=e454]:
+                  - img [ref=e455]
+                  - text: 已完成
+                - generic [ref=e458]: 视频生成
+                - paragraph [ref=e460]: 尝试 1/3 次
+                - generic [ref=e461]: 大约 8 小时前
+                - generic [ref=e462]:
+                  - button [ref=e463]:
+                    - img
+                  - img [ref=e464]
+              - generic [ref=e467] [cursor=pointer]:
+                - generic [ref=e468]:
+                  - img [ref=e469]
+                  - text: 失败
+                - generic [ref=e471]: 视频生成
+                - paragraph [ref=e473]: 应用重启导致任务中断，请在任务中心手动重试
+                - generic [ref=e474]: 大约 8 小时前
+                - generic [ref=e475]:
+                  - button [ref=e476]:
+                    - img
+                  - button [ref=e477]:
+                    - img
+                  - img [ref=e478]
+              - generic [ref=e481] [cursor=pointer]:
+                - generic [ref=e482]:
+                  - img [ref=e483]
+                  - text: 失败
+                - generic [ref=e485]: 视频生成
+                - paragraph [ref=e487]: 应用重启导致任务中断，请在任务中心手动重试
+                - generic [ref=e488]: 大约 8 小时前
+                - generic [ref=e489]:
+                  - button [ref=e490]:
+                    - img
+                  - button [ref=e491]:
+                    - img
+                  - img [ref=e492]
+              - generic [ref=e495] [cursor=pointer]:
+                - generic [ref=e496]:
+                  - img [ref=e497]
+                  - text: 失败
+                - generic [ref=e499]: 视频生成
+                - paragraph [ref=e501]: 应用重启导致任务中断，请在任务中心手动重试
+                - generic [ref=e502]: 大约 8 小时前
+                - generic [ref=e503]:
+                  - button [ref=e504]:
+                    - img
+                  - button [ref=e505]:
+                    - img
+                  - img [ref=e506]
+              - generic [ref=e509] [cursor=pointer]:
+                - generic [ref=e510]:
+                  - img [ref=e511]
+                  - text: 失败
+                - generic [ref=e513]: 视频生成
+                - paragraph [ref=e515]: 应用重启导致任务中断，请在任务中心手动重试
+                - generic [ref=e516]: 大约 8 小时前
+                - generic [ref=e517]:
+                  - button [ref=e518]:
+                    - img
+                  - button [ref=e519]:
+                    - img
+                  - img [ref=e520]
+              - generic [ref=e523] [cursor=pointer]:
+                - generic [ref=e524]:
+                  - img [ref=e525]
+                  - text: 失败
+                - generic [ref=e527]: 视频生成
+                - paragraph [ref=e529]: 应用重启导致任务中断，请在任务中心手动重试
+                - generic [ref=e530]: 大约 8 小时前
+                - generic [ref=e531]:
+                  - button [ref=e532]:
+                    - img
+                  - button [ref=e533]:
+                    - img
+                  - img [ref=e534]
+              - generic [ref=e537] [cursor=pointer]:
+                - generic [ref=e538]:
+                  - img [ref=e539]
+                  - text: 失败
+                - generic [ref=e541]: 视频生成
+                - paragraph [ref=e543]: 应用重启导致任务中断，请在任务中心手动重试
+                - generic [ref=e544]: 大约 8 小时前
+                - generic [ref=e545]:
+                  - button [ref=e546]:
+                    - img
+                  - button [ref=e547]:
+                    - img
+                  - img [ref=e548]
+              - generic [ref=e551] [cursor=pointer]:
+                - generic [ref=e552]:
+                  - img [ref=e553]
+                  - text: 失败
+                - generic [ref=e555]: 视频生成
+                - paragraph [ref=e557]: 应用重启导致任务中断，请在任务中心手动重试
+                - generic [ref=e558]: 大约 8 小时前
+                - generic [ref=e559]:
+                  - button [ref=e560]:
+                    - img
+                  - button [ref=e561]:
+                    - img
+                  - img [ref=e562]
+              - generic [ref=e565] [cursor=pointer]:
+                - generic [ref=e566]:
+                  - img [ref=e567]
+                  - text: 失败
+                - generic [ref=e569]: 视频生成
+                - paragraph [ref=e571]: 应用重启导致任务中断，请在任务中心手动重试
+                - generic [ref=e572]: 大约 8 小时前
+                - generic [ref=e573]:
+                  - button [ref=e574]:
+                    - img
+                  - button [ref=e575]:
+                    - img
+                  - img [ref=e576]
+              - generic [ref=e579] [cursor=pointer]:
+                - generic [ref=e580]:
+                  - img [ref=e581]
+                  - text: 已完成
+                - generic [ref=e584]: 视频生成
+                - paragraph [ref=e586]: 尝试 1/3 次
+                - generic [ref=e587]: 大约 8 小时前
+                - generic [ref=e588]:
+                  - button [ref=e589]:
+                    - img
+                  - img [ref=e590]
+              - generic [ref=e593] [cursor=pointer]:
+                - generic [ref=e594]:
+                  - img [ref=e595]
+                  - text: 已完成
+                - generic [ref=e598]: 视频生成
+                - paragraph [ref=e600]: 尝试 1/3 次
+                - generic [ref=e601]: 大约 8 小时前
+                - generic [ref=e602]:
+                  - button [ref=e603]:
+                    - img
+                  - img [ref=e604]
+              - generic [ref=e607] [cursor=pointer]:
+                - generic [ref=e608]:
+                  - img [ref=e609]
+                  - text: 已完成
+                - generic [ref=e612]: 视频生成
+                - paragraph [ref=e614]: 尝试 1/3 次
+                - generic [ref=e615]: 大约 8 小时前
+                - generic [ref=e616]:
+                  - button [ref=e617]:
+                    - img
+                  - img [ref=e618]
+              - generic [ref=e621] [cursor=pointer]:
+                - generic [ref=e622]:
+                  - img [ref=e623]
+                  - text: 已完成
+                - generic [ref=e626]: 视频生成
+                - paragraph [ref=e628]: 尝试 1/3 次
+                - generic [ref=e629]: 大约 8 小时前
+                - generic [ref=e630]:
+                  - button [ref=e631]:
+                    - img
+                  - img [ref=e632]
+              - generic [ref=e635] [cursor=pointer]:
+                - generic [ref=e636]:
+                  - img [ref=e637]
+                  - text: 已完成
+                - generic [ref=e640]: 视频生成
+                - paragraph [ref=e642]: 尝试 1/3 次
+                - generic [ref=e643]: 大约 8 小时前
+                - generic [ref=e644]:
+                  - button [ref=e645]:
+                    - img
+                  - img [ref=e646]
+              - generic [ref=e649] [cursor=pointer]:
+                - generic [ref=e650]:
+                  - img [ref=e651]
+                  - text: 已完成
+                - generic [ref=e654]: 视频生成
+                - paragraph [ref=e656]: 尝试 1/3 次
+                - generic [ref=e657]: 大约 8 小时前
+                - generic [ref=e658]:
+                  - button [ref=e659]:
+                    - img
+                  - img [ref=e660]
+              - generic [ref=e663] [cursor=pointer]:
+                - generic [ref=e664]:
+                  - img [ref=e665]
+                  - text: 已完成
+                - generic [ref=e668]: 视频生成
+                - paragraph [ref=e670]: 尝试 1/3 次
+                - generic [ref=e671]: 大约 8 小时前
+                - generic [ref=e672]:
+                  - button [ref=e673]:
+                    - img
+                  - img [ref=e674]
+              - generic [ref=e677] [cursor=pointer]:
+                - generic [ref=e678]:
+                  - img [ref=e679]
+                  - text: 已完成
+                - generic [ref=e682]: 视频生成
+                - paragraph [ref=e684]: 尝试 1/3 次
+                - generic [ref=e685]: 大约 8 小时前
+                - generic [ref=e686]:
+                  - button [ref=e687]:
+                    - img
+                  - img [ref=e688]
+              - generic [ref=e691] [cursor=pointer]:
+                - generic [ref=e692]:
+                  - img [ref=e693]
+                  - text: 失败
+                - generic [ref=e695]: 视频生成
+                - paragraph [ref=e697]: 应用重启导致任务中断，请在任务中心手动重试
+                - generic [ref=e698]: 大约 8 小时前
+                - generic [ref=e699]:
+                  - button [ref=e700]:
+                    - img
+                  - button [ref=e701]:
+                    - img
+                  - img [ref=e702]
+              - generic [ref=e705] [cursor=pointer]:
+                - generic [ref=e706]:
+                  - img [ref=e707]
+                  - text: 已完成
+                - generic [ref=e710]: 视频生成
+                - paragraph [ref=e712]: 尝试 1/3 次
+                - generic [ref=e713]: 大约 8 小时前
+                - generic [ref=e714]:
+                  - button [ref=e715]:
+                    - img
+                  - img [ref=e716]
+              - generic [ref=e719] [cursor=pointer]:
+                - generic [ref=e720]:
+                  - img [ref=e721]
+                  - text: 已完成
+                - generic [ref=e724]: 视频生成
+                - paragraph [ref=e726]: 尝试 1/3 次
+                - generic [ref=e727]: 大约 8 小时前
+                - generic [ref=e728]:
+                  - button [ref=e729]:
+                    - img
+                  - img [ref=e730]
+              - generic [ref=e733] [cursor=pointer]:
+                - generic [ref=e734]:
+                  - img [ref=e735]
+                  - text: 已完成
+                - generic [ref=e738]: 首帧生成
+                - paragraph [ref=e740]: 尝试 1/3 次
+                - generic [ref=e741]: 大约 8 小时前
+                - generic [ref=e742]:
+                  - button [ref=e743]:
+                    - img
+                  - img [ref=e744]
+              - generic [ref=e747] [cursor=pointer]:
+                - generic [ref=e748]:
+                  - img [ref=e749]
+                  - text: 已完成
+                - generic [ref=e752]: 首帧生成
+                - paragraph [ref=e754]: 尝试 1/3 次
+                - generic [ref=e755]: 大约 8 小时前
+                - generic [ref=e756]:
+                  - button [ref=e757]:
+                    - img
+                  - img [ref=e758]
+              - generic [ref=e761] [cursor=pointer]:
+                - generic [ref=e762]:
+                  - img [ref=e763]
+                  - text: 已完成
+                - generic [ref=e766]: 首帧生成
+                - paragraph [ref=e768]: 尝试 1/3 次
+                - generic [ref=e769]: 大约 8 小时前
+                - generic [ref=e770]:
+                  - button [ref=e771]:
+                    - img
+                  - img [ref=e772]
+              - generic [ref=e775] [cursor=pointer]:
+                - generic [ref=e776]:
+                  - img [ref=e777]
+                  - text: 已完成
+                - generic [ref=e780]: 首帧生成
+                - paragraph [ref=e782]: 尝试 1/3 次
+                - generic [ref=e783]: 大约 8 小时前
+                - generic [ref=e784]:
+                  - button [ref=e785]:
+                    - img
+                  - img [ref=e786]
+              - generic [ref=e789] [cursor=pointer]:
+                - generic [ref=e790]:
+                  - img [ref=e791]
+                  - text: 已完成
+                - generic [ref=e794]: 首帧生成
+                - paragraph [ref=e796]: 尝试 1/3 次
+                - generic [ref=e797]: 大约 8 小时前
+                - generic [ref=e798]:
+                  - button [ref=e799]:
+                    - img
+                  - img [ref=e800]
+              - generic [ref=e803] [cursor=pointer]:
+                - generic [ref=e804]:
+                  - img [ref=e805]
+                  - text: 已完成
+                - generic [ref=e808]: 首帧生成
+                - paragraph [ref=e810]: 尝试 1/3 次
+                - generic [ref=e811]: 大约 8 小时前
+                - generic [ref=e812]:
+                  - button [ref=e813]:
+                    - img
+                  - img [ref=e814]
+              - generic [ref=e817] [cursor=pointer]:
+                - generic [ref=e818]:
+                  - img [ref=e819]
+                  - text: 已完成
+                - generic [ref=e822]: 首帧生成
+                - paragraph [ref=e824]: 尝试 1/3 次
+                - generic [ref=e825]: 大约 8 小时前
+                - generic [ref=e826]:
+                  - button [ref=e827]:
+                    - img
+                  - img [ref=e828]
+              - generic [ref=e831] [cursor=pointer]:
+                - generic [ref=e832]:
+                  - img [ref=e833]
+                  - text: 已完成
+                - generic [ref=e836]: 首帧生成
+                - paragraph [ref=e838]: 尝试 1/3 次
+                - generic [ref=e839]: 大约 8 小时前
+                - generic [ref=e840]:
+                  - button [ref=e841]:
+                    - img
+                  - img [ref=e842]
+              - generic [ref=e845] [cursor=pointer]:
+                - generic [ref=e846]:
+                  - img [ref=e847]
+                  - text: 已完成
+                - generic [ref=e850]: 首帧生成
+                - paragraph [ref=e852]: 尝试 1/3 次
+                - generic [ref=e853]: 大约 8 小时前
+                - generic [ref=e854]:
+                  - button [ref=e855]:
+                    - img
+                  - img [ref=e856]
+              - generic [ref=e859] [cursor=pointer]:
+                - generic [ref=e860]:
+                  - img [ref=e861]
+                  - text: 已完成
+                - generic [ref=e864]: 首帧生成
+                - paragraph [ref=e866]: 尝试 1/3 次
+                - generic [ref=e867]: 大约 8 小时前
+                - generic [ref=e868]:
+                  - button [ref=e869]:
+                    - img
+                  - img [ref=e870]
+              - generic [ref=e873] [cursor=pointer]:
+                - generic [ref=e874]:
+                  - img [ref=e875]
+                  - text: 已完成
+                - generic [ref=e878]: 首帧生成
+                - paragraph [ref=e880]: 尝试 1/3 次
+                - generic [ref=e881]: 大约 8 小时前
+                - generic [ref=e882]:
+                  - button [ref=e883]:
+                    - img
+                  - img [ref=e884]
+              - generic [ref=e887] [cursor=pointer]:
+                - generic [ref=e888]:
+                  - img [ref=e889]
+                  - text: 已完成
+                - generic [ref=e892]: 首帧生成
+                - paragraph [ref=e894]: 尝试 1/3 次
+                - generic [ref=e895]: 大约 8 小时前
+                - generic [ref=e896]:
+                  - button [ref=e897]:
+                    - img
+                  - img [ref=e898]
+              - generic [ref=e901] [cursor=pointer]:
+                - generic [ref=e902]:
+                  - img [ref=e903]
+                  - text: 已完成
+                - generic [ref=e906]: 首帧生成
+                - paragraph [ref=e908]: 尝试 1/3 次
+                - generic [ref=e909]: 大约 8 小时前
+                - generic [ref=e910]:
+                  - button [ref=e911]:
+                    - img
+                  - img [ref=e912]
+              - generic [ref=e915] [cursor=pointer]:
+                - generic [ref=e916]:
+                  - img [ref=e917]
+                  - text: 已完成
+                - generic [ref=e920]: 首帧生成
+                - paragraph [ref=e922]: 尝试 1/3 次
+                - generic [ref=e923]: 大约 8 小时前
+                - generic [ref=e924]:
+                  - button [ref=e925]:
+                    - img
+                  - img [ref=e926]
+              - generic [ref=e929] [cursor=pointer]:
+                - generic [ref=e930]:
+                  - img [ref=e931]
+                  - text: 已完成
+                - generic [ref=e934]: 首帧生成
+                - paragraph [ref=e936]: 尝试 1/3 次
+                - generic [ref=e937]: 大约 8 小时前
+                - generic [ref=e938]:
+                  - button [ref=e939]:
+                    - img
+                  - img [ref=e940]
+              - generic [ref=e943] [cursor=pointer]:
+                - generic [ref=e944]:
+                  - img [ref=e945]
+                  - text: 已完成
+                - generic [ref=e948]: 首帧生成
+                - paragraph [ref=e950]: 尝试 1/3 次
+                - generic [ref=e951]: 大约 8 小时前
+                - generic [ref=e952]:
+                  - button [ref=e953]:
+                    - img
+                  - img [ref=e954]
+              - generic [ref=e957] [cursor=pointer]:
+                - generic [ref=e958]:
+                  - img [ref=e959]
+                  - text: 已完成
+                - generic [ref=e962]: 首帧生成
+                - paragraph [ref=e964]: 尝试 1/3 次
+                - generic [ref=e965]: 大约 8 小时前
+                - generic [ref=e966]:
+                  - button [ref=e967]:
+                    - img
+                  - img [ref=e968]
+              - generic [ref=e971] [cursor=pointer]:
+                - generic [ref=e972]:
+                  - img [ref=e973]
+                  - text: 已完成
+                - generic [ref=e976]: 首帧生成
+                - paragraph [ref=e978]: 尝试 1/3 次
+                - generic [ref=e979]: 大约 8 小时前
+                - generic [ref=e980]:
+                  - button [ref=e981]:
+                    - img
+                  - img [ref=e982]
+              - generic [ref=e985] [cursor=pointer]:
+                - generic [ref=e986]:
+                  - img [ref=e987]
+                  - text: 已完成
+                - generic [ref=e990]: 首帧生成
+                - paragraph [ref=e992]: 尝试 1/3 次
+                - generic [ref=e993]: 大约 8 小时前
+                - generic [ref=e994]:
+                  - button [ref=e995]:
+                    - img
+                  - img [ref=e996]
+              - generic [ref=e999] [cursor=pointer]:
+                - generic [ref=e1000]:
+                  - img [ref=e1001]
+                  - text: 已完成
+                - generic [ref=e1004]: 首帧生成
+                - paragraph [ref=e1006]: 尝试 1/3 次
+                - generic [ref=e1007]: 大约 8 小时前
+                - generic [ref=e1008]:
+                  - button [ref=e1009]:
+                    - img
+                  - img [ref=e1010]
+              - generic [ref=e1013] [cursor=pointer]:
+                - generic [ref=e1014]:
+                  - img [ref=e1015]
+                  - text: 已完成
+                - generic [ref=e1018]: 首帧生成
+                - paragraph [ref=e1020]: 尝试 1/3 次
+                - generic [ref=e1021]: 大约 8 小时前
+                - generic [ref=e1022]:
+                  - button [ref=e1023]:
+                    - img
+                  - img [ref=e1024]
+              - generic [ref=e1027] [cursor=pointer]:
+                - generic [ref=e1028]:
+                  - img [ref=e1029]
+                  - text: 已完成
+                - generic [ref=e1032]: 首帧生成
+                - paragraph [ref=e1034]: 尝试 1/3 次
+                - generic [ref=e1035]: 大约 8 小时前
+                - generic [ref=e1036]:
+                  - button [ref=e1037]:
+                    - img
+                  - img [ref=e1038]
+              - generic [ref=e1041] [cursor=pointer]:
+                - generic [ref=e1042]:
+                  - img [ref=e1043]
+                  - text: 已完成
+                - generic [ref=e1046]: 首帧生成
+                - paragraph [ref=e1048]: 尝试 1/3 次
+                - generic [ref=e1049]: 大约 8 小时前
+                - generic [ref=e1050]:
+                  - button [ref=e1051]:
+                    - img
+                  - img [ref=e1052]
+              - generic [ref=e1055] [cursor=pointer]:
+                - generic [ref=e1056]:
+                  - img [ref=e1057]
+                  - text: 已完成
+                - generic [ref=e1060]: 首帧生成
+                - paragraph [ref=e1062]: 尝试 1/3 次
+                - generic [ref=e1063]: 大约 8 小时前
+                - generic [ref=e1064]:
+                  - button [ref=e1065]:
+                    - img
+                  - img [ref=e1066]
+              - generic [ref=e1069] [cursor=pointer]:
+                - generic [ref=e1070]:
+                  - img [ref=e1071]
+                  - text: 已完成
+                - generic [ref=e1074]: 首帧生成
+                - paragraph [ref=e1076]: 尝试 1/3 次
+                - generic [ref=e1077]: 大约 8 小时前
+                - generic [ref=e1078]:
+                  - button [ref=e1079]:
+                    - img
+                  - img [ref=e1080]
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e1087] [cursor=pointer]:
+    - img [ref=e1088]
+  - alert [ref=e1091]

@@ -20,6 +20,12 @@ import {
 import { User, Anchor, Shuffle, Volume2, ImageIcon, Plus, Trash2, Save, Upload, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import axios from "axios";
+import { FormActionBar } from "@/components/studio/FormActionBar";
+import {
+  CHARACTER_ASSET_READY_TYPES,
+  normalizeCharacterAssetType,
+  type CharacterAssetStatus,
+} from "@/lib/studio-contracts";
 
 export interface CharacterBibleData {
   id?: string;
@@ -73,7 +79,41 @@ const defaultVoiceProfile = {
   emotionStyle: "",
   speechRate: "normal",
   voiceId: "",
-  provider: "minimax",
+  provider: "doubao-tts",
+};
+
+const GENDER_LABELS: Record<string, string> = {
+  male: "男",
+  female: "女",
+  neutral: "中性",
+  unknown: "未定义",
+};
+
+const AGE_RANGE_LABELS: Record<string, string> = {
+  teen: "少年（10-17）",
+  "young-adult": "青年（18-28）",
+  adult: "成年（29-40）",
+  "middle-aged": "中年（41-55）",
+  senior: "老年（55+）",
+};
+
+const VOICE_TYPE_LABELS: Record<string, string> = {
+  crisp: "清脆甜美",
+  mature: "成熟低沉",
+  magnetic: "磁性男声",
+  neutral: "中性",
+  childlike: "稚嫩童声",
+  cold: "冷艳气场",
+};
+
+const SPEECH_RATE_LABELS: Record<string, string> = {
+  slow: "缓慢",
+  normal: "标准",
+  fast: "较快",
+};
+
+const TTS_PROVIDER_LABELS: Record<string, string> = {
+  "doubao-tts": "豆包语音",
 };
 
 export function CharacterBibleEditor({ initialData, projectId, onSave, onCancel }: Props) {
@@ -158,28 +198,18 @@ export function CharacterBibleEditor({ initialData, projectId, onSave, onCancel 
   return (
     <div className="flex flex-col gap-6">
       {/* 顶部操作栏 */}
-      <div className="flex items-center justify-between">
+      <div className="rounded-2xl border border-border/60 bg-muted/15 p-4">
         <div className="flex items-center gap-2">
           <User className="h-5 w-5 text-primary" />
           <h2 className="text-xl font-semibold">
             {data.id ? `编辑角色：${data.name}` : "新建角色圣经"}
           </h2>
         </div>
-        <div className="flex gap-2">
-          {onCancel && (
-            <Button variant="outline" onClick={onCancel} disabled={saving}>
-              取消
-            </Button>
-          )}
-          <Button onClick={handleSave} disabled={saving}>
-            <Save className="mr-2 h-4 w-4" />
-            {saving ? "保存中…" : "保存圣经"}
-          </Button>
-        </div>
+        <p className="type-meta mt-2 text-muted-foreground">填写身份、锚点、可变范围与声音配置，统一角色跨镜头表现。</p>
       </div>
 
       <Tabs defaultValue="identity">
-        <TabsList className="grid grid-cols-5 w-full">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-2 md:grid-cols-5">
           <TabsTrigger value="identity">
             <User className="mr-1.5 h-3.5 w-3.5" />
             身份
@@ -201,7 +231,7 @@ export function CharacterBibleEditor({ initialData, projectId, onSave, onCancel 
 
         {/* ─── 身份标签 ─── */}
         <TabsContent value="identity" className="mt-4 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1.5">
               <Label>角色名称 *</Label>
               <Input
@@ -222,7 +252,9 @@ export function CharacterBibleEditor({ initialData, projectId, onSave, onCancel 
               <Label>性别</Label>
               <Select value={data.gender} onValueChange={(v) => v && update("gender", v)}>
                 <SelectTrigger>
-                  <SelectValue placeholder="选择性别" />
+                  <SelectValue placeholder="选择性别">
+                    {data.gender ? GENDER_LABELS[data.gender] ?? data.gender : "选择性别"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="male">男</SelectItem>
@@ -236,7 +268,9 @@ export function CharacterBibleEditor({ initialData, projectId, onSave, onCancel 
               <Label>年龄段</Label>
               <Select value={data.ageRange} onValueChange={(v) => v && update("ageRange", v)}>
                 <SelectTrigger>
-                  <SelectValue placeholder="选择年龄段" />
+                  <SelectValue placeholder="选择年龄段">
+                    {data.ageRange ? AGE_RANGE_LABELS[data.ageRange] ?? data.ageRange : "选择年龄段"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="teen">少年（10-17）</SelectItem>
@@ -298,7 +332,8 @@ export function CharacterBibleEditor({ initialData, projectId, onSave, onCancel 
 
         {/* ─── 外貌描述标签 ─── */}
         <TabsContent value="appearance" className="mt-4 space-y-4">
-          {[
+          <div className="grid gap-4 xl:grid-cols-2">
+            {[
             { key: "facialFeatures", label: "五官描述", placeholder: "如：丹凤眼、高鼻梁、樱桃小嘴、瓜子脸" },
             { key: "hairstyle", label: "发型 / 发色", placeholder: "如：乌黑长发、自然卷、常年披肩" },
             { key: "bodyType", label: "身材", placeholder: "如：身材高挑、纤细，168cm" },
@@ -315,7 +350,8 @@ export function CharacterBibleEditor({ initialData, projectId, onSave, onCancel 
                 rows={2}
               />
             </div>
-          ))}
+            ))}
+          </div>
         </TabsContent>
 
         {/* ─── 不可变锚点标签 ─── */}
@@ -378,7 +414,7 @@ export function CharacterBibleEditor({ initialData, projectId, onSave, onCancel 
 
         {/* ─── 声音标签 ─── */}
         <TabsContent value="voice" className="mt-4 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1.5">
               <Label>声线类型</Label>
               <Select
@@ -386,7 +422,11 @@ export function CharacterBibleEditor({ initialData, projectId, onSave, onCancel 
                 onValueChange={(v) => v && updateVoice("voiceType", v)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="选择声线" />
+                  <SelectValue placeholder="选择声线">
+                    {data.voiceProfile?.voiceType
+                      ? VOICE_TYPE_LABELS[data.voiceProfile.voiceType] ?? data.voiceProfile.voiceType
+                      : "选择声线"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="crisp">清脆甜美</SelectItem>
@@ -405,7 +445,9 @@ export function CharacterBibleEditor({ initialData, projectId, onSave, onCancel 
                 onValueChange={(v) => v && updateVoice("speechRate", v)}
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue>
+                    {SPEECH_RATE_LABELS[data.voiceProfile?.speechRate ?? "normal"] ?? data.voiceProfile?.speechRate ?? "标准"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="slow">缓慢</SelectItem>
@@ -417,15 +459,16 @@ export function CharacterBibleEditor({ initialData, projectId, onSave, onCancel 
             <div className="space-y-1.5">
               <Label>TTS Provider</Label>
               <Select
-                value={data.voiceProfile?.provider ?? "minimax"}
+                value={data.voiceProfile?.provider ?? "doubao-tts"}
                 onValueChange={(v) => v && updateVoice("provider", v)}
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue>
+                    {TTS_PROVIDER_LABELS[data.voiceProfile?.provider ?? "doubao-tts"] ?? data.voiceProfile?.provider ?? "豆包语音"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="minimax">MiniMax</SelectItem>
-                  <SelectItem value="fish-audio">Fish Audio</SelectItem>
+                  <SelectItem value="doubao-tts">豆包语音</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -452,6 +495,18 @@ export function CharacterBibleEditor({ initialData, projectId, onSave, onCancel 
 
       {/* 资产上传区域 */}
       {data.id && <CharacterAssetUploader projectId={data.projectId} characterId={data.id} />}
+
+      <FormActionBar className="px-0 pb-0">
+        {onCancel && (
+          <Button variant="outline" onClick={onCancel} disabled={saving}>
+            取消
+          </Button>
+        )}
+        <Button onClick={handleSave} disabled={saving}>
+          <Save className="mr-2 h-4 w-4" />
+          {saving ? "保存中…" : "保存圣经"}
+        </Button>
+      </FormActionBar>
     </div>
   );
 }
@@ -466,26 +521,65 @@ interface CharacterAsset {
   tags: string;
 }
 
+interface CharacterAssetSnapshot {
+  assetStatus: CharacterAssetStatus;
+  completenessRatio: number;
+  presentTypes: string[];
+  missingTypes: string[];
+  generatedTypes: string[];
+  totalAssets: number;
+}
+
 const ASSET_TYPE_LABELS: Record<string, string> = {
-  reference: "参考图",
-  costume: "服装",
-  expression: "表情",
-  angle: "多角度",
+  "reference-main": "定妆主图",
+  "angle-left": "左侧角度",
+  "angle-right": "右侧角度",
+  "angle-three-quarter": "三分之二角度",
+  "expression-neutral": "平静表情",
+  "expression-angry": "愤怒表情",
+  "expression-sad": "悲伤表情",
+  "expression-surprised": "惊讶表情",
   other: "其他",
 };
 
 function CharacterAssetUploader({ projectId, characterId }: { projectId: string; characterId: string }) {
   const [assets, setAssets] = useState<CharacterAsset[]>([]);
+  const [assetSnapshot, setAssetSnapshot] = useState<CharacterAssetSnapshot | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [assetType, setAssetType] = useState("reference");
+  const [generatingPack, setGeneratingPack] = useState(false);
+  const [assetType, setAssetType] = useState("reference-main");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    axios
-      .get<CharacterAsset[]>(`/api/projects/${projectId}/characters/${characterId}/assets`)
-      .then((r) => setAssets(r.data))
-      .catch(() => {});
+    let cancelled = false;
+
+    const load = async () => {
+      const [assetsRes, statusRes] = await Promise.all([
+        axios.get<CharacterAsset[]>(`/api/projects/${projectId}/characters/${characterId}/assets`),
+        axios.get<{ assetSnapshot: CharacterAssetSnapshot }>(`/api/projects/${projectId}/characters/${characterId}/asset-status`),
+      ]);
+
+      if (cancelled) return;
+
+      setAssets(assetsRes.data.map((asset) => ({ ...asset, assetType: normalizeCharacterAssetType(asset.assetType) })));
+      setAssetSnapshot(statusRes.data.assetSnapshot);
+    };
+
+    load().catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
   }, [projectId, characterId]);
+
+  const refreshAssets = async () => {
+    const [assetsRes, statusRes] = await Promise.all([
+      axios.get<CharacterAsset[]>(`/api/projects/${projectId}/characters/${characterId}/assets`),
+      axios.get<{ assetSnapshot: CharacterAssetSnapshot }>(`/api/projects/${projectId}/characters/${characterId}/asset-status`),
+    ]);
+    setAssets(assetsRes.data.map((asset) => ({ ...asset, assetType: normalizeCharacterAssetType(asset.assetType) })));
+    setAssetSnapshot(statusRes.data.assetSnapshot);
+  };
 
   const handleUpload = async (files: FileList) => {
     setUploading(true);
@@ -501,12 +595,13 @@ function CharacterAssetUploader({ projectId, characterId }: { projectId: string;
           formData,
           { headers: { "Content-Type": "multipart/form-data" } }
         );
-        setAssets((prev) => [...prev, res.data]);
+        setAssets((prev) => [...prev, { ...res.data, assetType: normalizeCharacterAssetType(res.data.assetType) }]);
         uploaded += 1;
       } catch {
         toast.error(`上传 ${file.name} 失败`);
       }
     }
+    await refreshAssets().catch(() => {});
     if (uploaded > 0) toast.success(`已上传 ${uploaded} 张定妆资产`);
     setUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -516,15 +611,84 @@ function CharacterAssetUploader({ projectId, characterId }: { projectId: string;
     try {
       await axios.delete(`/api/projects/${projectId}/characters/${characterId}/assets/${asset.id}`);
       setAssets((prev) => prev.filter((a) => a.id !== asset.id));
+      await refreshAssets().catch(() => {});
       toast.success("已删除");
     } catch {
       toast.error("删除失败");
     }
   };
 
+  const handleGeneratePack = async () => {
+    setGeneratingPack(true);
+    try {
+      const res = await axios.post<{ createdAssets: CharacterAsset[] }>(
+        `/api/projects/${projectId}/characters/${characterId}/assets/generate`
+      );
+      await refreshAssets();
+      toast.success(
+        res.data.createdAssets.length > 0
+          ? `已补齐 ${res.data.createdAssets.length} 个核心角色资产`
+          : "角色核心资产包已完整"
+      );
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data as { error?: string } | undefined)?.error ?? "生成失败"
+        : "生成失败";
+      toast.error(message);
+    } finally {
+      setGeneratingPack(false);
+    }
+  };
+
+  const statusTone =
+    assetSnapshot?.assetStatus === "ready"
+      ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+      : assetSnapshot?.assetStatus === "partial"
+        ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
+        : "bg-muted text-muted-foreground border-border";
+
   return (
     <div className="space-y-3">
       <Separator />
+      <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">核心一致性包</span>
+              <Badge variant="outline" className={statusTone}>
+                {assetSnapshot?.assetStatus === "ready"
+                  ? "已完备"
+                  : assetSnapshot?.assetStatus === "partial"
+                    ? "待补齐"
+                    : "未建立"}
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              覆盖 {assetSnapshot ? `${Math.round(assetSnapshot.completenessRatio * 100)}%` : "0%"}，
+              需要 {CHARACTER_ASSET_READY_TYPES.length} 类核心角色资产。
+            </p>
+            {assetSnapshot && assetSnapshot.missingTypes.length > 0 && (
+              <div className="flex flex-wrap gap-1 pt-1">
+                {assetSnapshot.missingTypes.map((type) => (
+                  <Badge key={type} variant="secondary" className="text-[10px]">
+                    缺少 {ASSET_TYPE_LABELS[type] ?? type}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={generatingPack || uploading}
+            onClick={handleGeneratePack}
+          >
+            {generatingPack ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+            生成资产包
+          </Button>
+        </div>
+      </div>
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ImageIcon className="size-4 text-muted-foreground" />

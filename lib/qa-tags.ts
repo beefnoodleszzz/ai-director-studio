@@ -41,6 +41,9 @@ export const QA_TAGS: QATag[] = [
   // ── 视频专用 ──
   { code: "motion-jitter", label: "运动抖动", category: "video", severity: "minor" },
   { code: "temporal-inconsistency", label: "帧间不一致", category: "video", severity: "major", isConsistencyTag: true },
+  { code: "continuity-break", label: "镜头承接断裂", category: "video", severity: "major", isConsistencyTag: true },
+  { code: "wrong-expression", label: "表情不符", category: "image", severity: "major", isConsistencyTag: true },
+  { code: "wrong-angle-reference", label: "角度不符", category: "image", severity: "minor", isConsistencyTag: true },
   { code: "sync-error", label: "口型音画不同步", category: "video", severity: "major" },
   { code: "motion-artifact", label: "运动伪影", category: "video", severity: "major" },
   { code: "wrong-duration", label: "时长不符", category: "video", severity: "minor" },

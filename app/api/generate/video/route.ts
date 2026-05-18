@@ -8,15 +8,18 @@ export async function POST(req: NextRequest) {
       episodeId: string;
       sceneId: string;
       shotId: string;
-      adoptedTakeId: string;
+      adoptedImageTakeId?: string;
+      adoptedTakeId?: string;
       visualPrompt?: string;
       provider?: string;
+      stopOnQaFail?: boolean;
     };
 
-    const { projectId, episodeId, sceneId, shotId, adoptedTakeId } = body;
-    if (!projectId || !episodeId || !sceneId || !shotId || !adoptedTakeId) {
+    const adoptedImageTakeId = body.adoptedImageTakeId ?? body.adoptedTakeId;
+    const { projectId, episodeId, sceneId, shotId } = body;
+    if (!projectId || !episodeId || !sceneId || !shotId || !adoptedImageTakeId) {
       return NextResponse.json(
-        { error: "projectId, episodeId, sceneId, shotId, adoptedTakeId are required" },
+        { error: "projectId, episodeId, sceneId, shotId, adoptedImageTakeId are required" },
         { status: 400 }
       );
     }
@@ -26,9 +29,10 @@ export async function POST(req: NextRequest) {
       episodeId,
       sceneId,
       shotId,
-      adoptedTakeId,
+      adoptedImageTakeId,
       visualPrompt: body.visualPrompt ?? "",
       provider: body.provider,
+      stopOnQaFail: body.stopOnQaFail ?? true,
     });
 
     return NextResponse.json({ taskId, ...result });

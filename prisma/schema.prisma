@@ -18,6 +18,8 @@ model Project {
   worldSetting String      @default("") // 世界观核心设定
   era          String      @default("") // 时代/地点
   forbidRules  String      @default("") // 禁改规则 (JSON array as string)
+  productionStage String   @default("idea") // idea | outline_ready | cast_locked | script_ready | breakdown_ready | production_ready
+  storyOutline  String     @default("") // JSON: logline / conflict / cast / episode beats
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
@@ -83,6 +85,12 @@ model CharacterBible {
 
   // 核心 prompt
   basePrompt    String @default("") // 供 AI 生成用的基础 prompt
+  assetStatus   String @default("missing") // missing | partial | ready
+  isLead        Boolean @default(false)
+  dramaticGoal  String  @default("")
+  conflictRole  String  @default("")
+  relationshipSummary String @default("")
+  arcSummary    String  @default("")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -97,7 +105,7 @@ model CharacterBible {
 model CharacterAsset {
   id          String @id @default(uuid())
   characterId String
-  assetType   String // reference | angle | expression | costume | other
+  assetType   String // reference-main | angle-left | angle-right | angle-three-quarter | expression-neutral | expression-angry | expression-sad | expression-surprised | other
   label       String @default("")
   localPath   String
   url         String @default("")
@@ -137,6 +145,9 @@ model Episode {
   hook        String @default("") // 本集 hook
   cliffhanger String @default("") // 结尾悬念
   prevLink    String @default("") // 上集承接点
+  scriptDraft String @default("") // AI / 手工确认后的正文剧本
+  scriptSource String @default("manual") // manual | generated
+  productionStage String @default("idea") // idea | outline_ready | cast_locked | script_ready | breakdown_ready | production_ready
   status      String @default("draft") // draft | in-progress | completed
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -161,6 +172,7 @@ model Scene {
   infoReveal  String @default("") // 信息揭示
   summary     String @default("") // 场次摘要
   status      String @default("pending") // pending | ready | generated | approved
+  deletedAt   DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -185,9 +197,19 @@ model Shot {
   visualPrompt    String @default("")
   audioPrompt     String @default("")
   dialogue        String @default("")
-  adoptedTakeId   String? // 当前采用的 take
+  adoptedImageTakeId String? // 当前采用的首帧
+  adoptedVideoTakeId String? // 当前采用的视频
+  adoptedAudioTakeId String? // 当前采用的音频
   readiness       String @default("draft") // draft | ready | generating | done
+  pipelineStage   String @default("draft") // draft | image_generating | image_ready | video_generating | video_ready | audio_generating | blocked_for_review | ready_for_export
   status          String @default("pending")
+  exportReadiness String @default("ready") // ready | warn | blocked
+  hasMotionVideo  Boolean @default(false)
+  fallbackMode    String @default("none") // none | image_motion | freeze_extend
+  autoContinue    Boolean @default(true)
+  blockReason     String @default("")
+  blockMeta       String @default("") // JSON: 阻断详情
+  deletedAt       DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -230,6 +252,7 @@ model GenerationTask {
   shotId       String?
   parentTaskId String?
   taskType     String   // script-breakdown | image | video | audio | sfx | bgm | assembly | qa
+  taskStage    String   @default("") // image | video | audio | review | export
   status       String   @default("queued") // queued | running | retrying | paused | failed | completed | cancelled
   priority     Int      @default(0)
   inputRef     String   @default("") // JSON: 输入对象引用
@@ -238,6 +261,8 @@ model GenerationTask {
   maxAttempts  Int      @default(3)
   logs         String   @default("") // newline-separated log entries
   errorReason  String   @default("")
+  blockReason  String   @default("")
+  blockMeta    String   @default("") // JSON: 阻断详情
   startedAt    DateTime?
   completedAt  DateTime?
   createdAt    DateTime @default(now())

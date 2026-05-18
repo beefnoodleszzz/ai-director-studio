@@ -17,7 +17,20 @@ export async function GET(
       include: { reviews: { orderBy: { reviewedAt: "desc" }, take: 1 } },
       orderBy: { createdAt: "desc" },
     });
-    return NextResponse.json(takes);
+    return NextResponse.json(
+      takes.map((take) => {
+        let paramsSnapshot: Record<string, unknown> | null = null;
+        try {
+          paramsSnapshot = take.paramsSnapshot ? JSON.parse(take.paramsSnapshot) : null;
+        } catch {
+          paramsSnapshot = null;
+        }
+        return {
+          ...take,
+          paramsSnapshotJson: paramsSnapshot,
+        };
+      })
+    );
   } catch (err) {
     console.error("[GET /api/shots/:shotId/takes]", err);
     return NextResponse.json({ error: "Failed" }, { status: 500 });

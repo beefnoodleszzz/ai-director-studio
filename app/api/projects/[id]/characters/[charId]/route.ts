@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import {
+  buildCharacterAssetStatusSnapshot,
+  normalizeCharacterAssetRecord,
+} from "@/lib/workflows/character-assets";
 
 export async function PATCH(
   req: NextRequest,
@@ -7,24 +11,75 @@ export async function PATCH(
 ) {
   try {
     const { charId } = await params;
-    const body = await req.json();
-    const { voiceProfile, ...charData } = body;
+    const body = (await req.json()) as Record<string, unknown> & {
+      voiceProfile?: Record<string, unknown>;
+    };
+    const allowedCharacterFields = [
+      "name",
+      "aliases",
+      "gender",
+      "ageRange",
+      "role",
+      "facialFeatures",
+      "hairstyle",
+      "bodyType",
+      "wardrobeBase",
+      "temperamentTags",
+      "typicalExpressions",
+      "typicalActions",
+      "anchorFace",
+      "anchorHair",
+      "anchorWardrobe",
+      "wardrobeVariants",
+      "emotionRange",
+      "sceneOutfits",
+      "relationships",
+      "basePrompt",
+      "isLead",
+      "dramaticGoal",
+      "conflictRole",
+      "relationshipSummary",
+      "arcSummary",
+    ] as const;
 
-    const character = await prisma.characterBible.update({
+    const charData = Object.fromEntries(
+      allowedCharacterFields
+        .filter((field) => body[field] !== undefined)
+        .map((field) => [field, body[field]])
+    );
+
+    await prisma.characterBible.update({
       where: { id: charId },
       data: charData,
       include: { voiceProfile: true, assets: true },
     });
 
-    if (voiceProfile) {
+    if (body.voiceProfile) {
       await prisma.voiceProfile.upsert({
         where: { characterId: charId },
-        create: { characterId: charId, ...voiceProfile },
-        update: voiceProfile,
+        create: { characterId: charId, ...body.voiceProfile },
+        update: body.voiceProfile,
       });
     }
 
-    return NextResponse.json(character);
+    const refreshed = await prisma.characterBible.findUnique({
+      where: { id: charId },
+      include: { voiceProfile: true, assets: true },
+    });
+
+    if (!refreshed) {
+      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+    }
+
+    const normalizedAssets = refreshed.assets.map(normalizeCharacterAssetRecord);
+    const assetSnapshot = buildCharacterAssetStatusSnapshot(normalizedAssets);
+
+    return NextResponse.json({
+      ...refreshed,
+      assetStatus: assetSnapshot.assetStatus,
+      assetSnapshot,
+      assets: normalizedAssets,
+    });
   } catch (err) {
     console.error("[PATCH /api/projects/:id/characters/:charId]", err);
     return NextResponse.json({ error: "Failed" }, { status: 500 });

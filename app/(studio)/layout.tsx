@@ -19,6 +19,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { useProjectStore } from "@/stores/projectStore";
 import axios from "axios";
 import type { ProjectData } from "@/stores/projectStore";
@@ -36,18 +37,18 @@ export default function StudioLayout({ children }: { children: React.ReactNode }
 
   return (
     <SidebarProvider>
-      <div className="flex h-screen w-full overflow-hidden">
+      <div className="flex h-svh min-h-svh w-full overflow-hidden">
         <Sidebar className="border-r border-border/50">
-          <SidebarHeader className="px-4 py-3">
+          <SidebarHeader className="px-5 py-4">
             <Link href="/" className="flex items-center gap-2.5">
               <div className="size-8 rounded-lg bg-primary/20 border border-primary/30 flex items-center justify-center">
                 <Clapperboard className="size-4 text-primary" />
               </div>
               <div>
-                <p className="text-sm font-semibold leading-tight tracking-tight text-foreground">
+                <p className="text-base font-semibold leading-tight tracking-tight text-foreground">
                   AI Director
                 </p>
-                <p className="text-[10px] text-muted-foreground">Studio v0.1</p>
+                <p className="type-caption text-muted-foreground">Studio v0.1</p>
               </div>
             </Link>
           </SidebarHeader>
@@ -74,7 +75,7 @@ export default function StudioLayout({ children }: { children: React.ReactNode }
               <ScrollArea className="max-h-64">
                 <SidebarMenu>
                   {projects.length === 0 ? (
-                    <p className="px-3 py-2 text-xs text-muted-foreground">暂无项目</p>
+                    <p className="px-3 py-2 type-meta text-muted-foreground">暂无项目</p>
                   ) : (
                     projects.map((project) => (
                       <SidebarMenuItem key={project.id}>
@@ -85,7 +86,7 @@ export default function StudioLayout({ children }: { children: React.ReactNode }
                         >
                           <Film className="size-4" />
                           <span className="truncate">{project.title}</span>
-                          <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0">
+                          <Badge variant="secondary" className="ml-auto text-xs px-1.5 py-0">
                             {project.episodes?.length ?? 0}集
                           </Badge>
                         </SidebarMenuButton>
@@ -98,23 +99,26 @@ export default function StudioLayout({ children }: { children: React.ReactNode }
           </SidebarContent>
 
           <SidebarFooter className="p-3">
-            <div className="text-[10px] text-muted-foreground text-center opacity-50">
+            <div className="type-caption text-muted-foreground text-center opacity-50">
               AI Director Studio v0.1.0
             </div>
           </SidebarFooter>
         </Sidebar>
 
-        <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-          <header className="h-12 flex items-center gap-3 px-4 border-b border-border/50 shrink-0">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <header className="h-14 flex items-center gap-3 px-5 border-b border-border/50 shrink-0">
             <SidebarTrigger className="size-7" />
             <Separator orientation="vertical" className="h-4 opacity-30" />
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2 type-body text-muted-foreground">
               <FolderOpen className="size-3.5" />
               <span>{currentProject?.title ?? "选择项目"}</span>
             </div>
+            <div className="ml-auto">
+              <ThemeToggle />
+            </div>
           </header>
 
-          <main className="flex-1 overflow-auto">
+          <main className="min-h-0 flex-1 overflow-auto">
             {children}
           </main>
         </div>

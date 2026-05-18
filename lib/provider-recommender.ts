@@ -16,7 +16,7 @@ export interface ProviderScore {
   sampleSize: number;
 }
 
-const WEIGHTS = { passRate: 0.5, avgScore: 0.3, speed: 0.2 };
+const WEIGHTS = { passRate: 0.4, avgScore: 0.25, speed: 0.15, consistency: 0.2 };
 const MAX_GEN_MS = 120_000; // 2min 为参考最慢值
 
 /**
@@ -55,13 +55,13 @@ export async function recommendProvider(
   // 按 provider 分组
   const providerMap = new Map<
     string,
-    { passes: number; scores: number[]; timings: number[] }
+    { passes: number; scores: number[]; timings: number[]; consistencyPasses: number; consistencyTotal: number }
   >();
 
   for (const take of takes) {
     const p = take.provider || "unknown";
     if (!providerMap.has(p)) {
-      providerMap.set(p, { passes: 0, scores: [], timings: [] });
+      providerMap.set(p, { passes: 0, scores: [], timings: [], consistencyPasses: 0, consistencyTotal: 0 });
     }
     const entry = providerMap.get(p)!;
     entry.scores.push(take.autoScore);
@@ -69,6 +69,15 @@ export async function recommendProvider(
 
     const verdict = take.reviews[0]?.verdict;
     if (verdict === "pass" || verdict === "warn") entry.passes += 1;
+    const review = take.reviews[0];
+    if (review) {
+      const tags = review.failTags ? safelyParseTags(review.failTags) : [];
+      const hasConsistencyIssue = tags.some((tag) =>
+        ["face-inconsistency", "wardrobe-drift", "hairstyle-change", "identity-unstable"].includes(tag)
+      );
+      entry.consistencyTotal += 1;
+      if (!hasConsistencyIssue) entry.consistencyPasses += 1;
+    }
   }
 
   const scores: ProviderScore[] = [];
@@ -79,10 +88,14 @@ export async function recommendProvider(
     const avgScore = data.scores.reduce((a, b) => a + b, 0) / n;
     const avgMs = data.timings.reduce((a, b) => a + b, 0) / n;
     const speedScore = Math.max(0, 1 - avgMs / MAX_GEN_MS);
+    const consistencyScore = data.consistencyTotal > 0
+      ? data.consistencyPasses / data.consistencyTotal
+      : 1;
     const compositeScore =
       passRate * WEIGHTS.passRate +
       avgScore * WEIGHTS.avgScore +
-      speedScore * WEIGHTS.speed;
+      speedScore * WEIGHTS.speed +
+      consistencyScore * WEIGHTS.consistency;
 
     scores.push({
       provider,
@@ -115,4 +128,14 @@ export async function recommendProvider(
     reason: `基于 ${best.sampleSize} 个样本，${best.provider} 综合得分最高（通过率 ${Math.round(best.passRate * 100)}%，均分 ${best.avgScore.toFixed(2)}）`,
     scores,
   };
+}
+
+function safelyParseTags(raw: string) {
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.map(String);
+  } catch {
+    // noop
+  }
+  return [];
 }

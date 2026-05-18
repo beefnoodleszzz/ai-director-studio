@@ -53,6 +53,8 @@ export async function PATCH(
       worldSetting: string;
       era: string;
       forbidRules: string;
+      productionStage: string;
+      storyOutline: string;
     }>;
 
     const project = await prisma.project.update({ where: { id }, data: body });

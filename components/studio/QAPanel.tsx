@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +25,7 @@ import {
 import axios from "axios";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { MediaPreview } from "@/components/studio/MediaPreview";
 
 type Verdict = "pass" | "warn" | "fail" | "all";
 
@@ -36,6 +36,7 @@ interface QAItem {
   sceneId: string;
   shotId: string;
   adoptedImageTakeId: string | null;
+  adoptedVideoTakeId?: string | null;
   visualPrompt: string;
   // 展示字段
   shotOrder: number;
@@ -50,6 +51,13 @@ interface QAItem {
     localVideo: string | null;
     autoScore: number;
     isAdopted: boolean;
+    paramsSnapshot?: {
+      retryStrategy?: {
+        promptHints?: string[];
+        preferredAssetTypes?: string[];
+        disableContinuityReference?: boolean;
+      };
+    } | null;
   };
   review: {
     id: string;
@@ -155,6 +163,29 @@ export function QAPanel({ projectId, episodeId }: Props) {
     }
   };
 
+  const handleRetryWithGuidance = async (item: QAItem) => {
+    setRetrying((prev) => new Set(prev).add(item.take.id));
+    try {
+      const failTags: { code: string; label: string }[] = (() => {
+        try { return JSON.parse(item.review.failTags || "[]"); } catch { return []; }
+      })();
+      const guidance =
+        item.take.paramsSnapshot?.retryStrategy?.promptHints?.join(", ") ||
+        item.review.details ||
+        "enhance continuity and identity consistency";
+      await axios.post(`/api/shots/${item.shotId}/redo`, {
+        strategyHint: guidance,
+        reasonTags: failTags.map((tag) => tag.code),
+      });
+      toast.success("已按建议提交镜头重做");
+      fetchQAItems();
+    } catch {
+      toast.error("按建议重做失败");
+    } finally {
+      setRetrying((prev) => { const next = new Set(prev); next.delete(item.take.id); return next; });
+    }
+  };
+
   const handleAcceptMinor = async (item: QAItem) => {
     try {
       // 更新 Review：verdict 改为 warn，suggestion 改为 accept-minor
@@ -234,9 +265,9 @@ export function QAPanel({ projectId, episodeId }: Props) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       {/* 统计卡片 */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid min-w-0 grid-cols-2 gap-3 xl:grid-cols-4">
         {[
           { label: "全部", value: stats.total, key: "all", color: "text-foreground" },
           { label: "通过", value: stats.pass, key: "pass", color: "text-green-500" },
@@ -253,14 +284,14 @@ export function QAPanel({ projectId, episodeId }: Props) {
           >
             <CardContent className="py-3 px-4">
               <p className={cn("text-2xl font-bold", color)}>{value}</p>
-              <p className="text-xs text-muted-foreground">{label}</p>
+              <p className="type-meta text-muted-foreground">{label}</p>
             </CardContent>
           </Card>
         ))}
       </div>
 
       {/* 过滤栏 */}
-      <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex min-w-0 flex-wrap items-center gap-3 rounded-2xl border border-border/60 bg-muted/15 p-3">
         <Filter className="size-4 text-muted-foreground shrink-0" />
         {/* failTags 标签筛选 */}
         {allFailTags.length > 0 && (
@@ -324,7 +355,7 @@ export function QAPanel({ projectId, episodeId }: Props) {
           {items.length === 0 ? "暂无 QA 数据，请先生成内容" : "当前筛选条件下无结果"}
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid min-w-0 gap-4 xl:grid-cols-2 xl:items-start">
           {filteredItems.map((item) => {
             const verdictInfo = verdictConfig[item.review.verdict as keyof typeof verdictConfig] ?? verdictConfig.pass;
             const VerdictIcon = verdictInfo.icon;
@@ -341,49 +372,53 @@ export function QAPanel({ projectId, episodeId }: Props) {
                 )}
               >
                 <CardContent className="p-0">
-                  <div className="flex gap-4 p-4">
+                  <div className="grid gap-4 p-4 xl:grid-cols-[14rem_minmax(0,1fr)_auto] xl:items-start">
                     {/* 预览 */}
-                    <div className="relative size-20 rounded-lg bg-muted shrink-0 overflow-hidden">
-                      {item.take.localImage ? (
-                        <Image
-                          src={item.take.localImage}
-                          alt="Take"
-                          fill
-                          className="object-cover"
-                          unoptimized
+                    <div className="overflow-hidden rounded-xl bg-muted xl:sticky xl:top-4">
+                      {item.take.localImage || item.take.localVideo ? (
+                        <MediaPreview
+                          type={item.take.localVideo ? "video" : "image"}
+                          src={item.take.localVideo ?? item.take.localImage}
+                          poster={item.take.localImage}
+                          className="aspect-[4/5] xl:aspect-[3/4]"
                         />
                       ) : (
-                        <div className="flex items-center justify-center h-full">
+                        <div className="flex aspect-[4/5] items-center justify-center">
                           <ImageIcon className="size-6 text-muted-foreground" />
                         </div>
                       )}
                     </div>
 
                     {/* 信息 */}
-                    <div className="flex-1 min-w-0 space-y-1">
+                    <div className="min-w-0 space-y-3">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono text-xs text-muted-foreground">
+                        <span className="font-mono type-meta text-muted-foreground">
                           SC{item.sceneOrder.toString().padStart(2, "0")} · SH{item.shotOrder.toString().padStart(2, "0")}
                         </span>
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                        <Badge variant="outline" className="text-xs px-1.5 py-0">
                           {item.take.takeType}
                         </Badge>
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                        <Badge variant="outline" className="text-xs px-1.5 py-0">
                           {item.take.provider}
                         </Badge>
-                        <div className={cn("flex items-center gap-1 text-xs", verdictInfo.color)}>
+                        <div className={cn("flex items-center gap-1 text-sm", verdictInfo.color)}>
                           <VerdictIcon className="size-3.5" />
                           {verdictInfo.label}
                         </div>
                         {item.take.isAdopted && (
-                          <Badge className="text-[10px] px-1.5 py-0">已采用</Badge>
+                          <Badge className="text-xs px-1.5 py-0">已采用</Badge>
+                        )}
+                        {item.take.takeType === "video" && item.adoptedImageTakeId && (
+                          <Badge variant="secondary" className="text-xs px-1.5 py-0">
+                            已绑定首帧
+                          </Badge>
                         )}
                       </div>
 
-                      <p className="text-xs text-muted-foreground">{item.location}</p>
+                      <p className="text-sm font-medium leading-6 text-foreground">{item.location}</p>
 
                       {item.review.details && (
-                        <p className="text-xs text-muted-foreground">{item.review.details}</p>
+                        <p className="text-sm leading-6 text-muted-foreground">{item.review.details}</p>
                       )}
 
                       {failTags.length > 0 && (
@@ -392,7 +427,7 @@ export function QAPanel({ projectId, episodeId }: Props) {
                             <Badge
                               key={i}
                               variant="destructive"
-                              className="text-[10px] px-1.5 py-0 opacity-80"
+                              className="text-xs px-1.5 py-0 opacity-80"
                             >
                               {tag.label}
                             </Badge>
@@ -400,42 +435,72 @@ export function QAPanel({ projectId, episodeId }: Props) {
                         </div>
                       )}
 
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <span>建议：</span>
-                        <span className={cn(
-                          item.review.suggestion === "must-redo" || item.review.suggestion === "change-provider"
-                            ? "text-destructive"
-                            : "text-foreground"
-                        )}>
+                      {item.take.paramsSnapshot?.retryStrategy?.promptHints?.length ? (
+                        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+                          <p className="text-xs font-medium text-amber-700">系统下次重试会这样调整</p>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {item.take.paramsSnapshot.retryStrategy.promptHints.slice(0, 3).map((hint) => (
+                              <Badge key={hint} variant="outline" className="text-[10px] border-amber-500/30 text-amber-700">
+                                {hint}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <div className="grid min-w-0 grid-cols-[auto_minmax(7rem,1fr)_auto] items-center gap-x-2 type-meta text-muted-foreground">
+                        <span className="whitespace-nowrap">建议：</span>
+                        <span
+                          className={cn(
+                            "whitespace-nowrap",
+                            item.review.suggestion === "must-redo" || item.review.suggestion === "change-provider"
+                              ? "text-destructive"
+                              : "text-foreground"
+                          )}
+                        >
                           {suggestionLabels[item.review.suggestion] ?? item.review.suggestion}
                         </span>
-                        <span>· 自动评分 {(item.review.score * 10).toFixed(1)}</span>
+                        <span className="justify-self-end whitespace-nowrap">自动评分 {(item.review.score * 10).toFixed(1)}</span>
                       </div>
+                      {item.take.takeType === "video" && !item.adoptedImageTakeId ? (
+                        <p className="text-xs text-amber-600">当前镜头没有已采用首帧，视频重做会被阻断。</p>
+                      ) : null}
                     </div>
 
                     {/* 操作 */}
-                    <div className="flex flex-col gap-1.5 shrink-0 justify-center">
+                    <div className="flex flex-row flex-wrap gap-2 xl:w-32 xl:flex-col xl:justify-start">
                       {(item.review.suggestion === "must-redo" || item.review.suggestion === "change-provider") && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs gap-1"
-                          onClick={() => handleRetry(item)}
-                          disabled={retrying.has(item.take.id)}
-                        >
-                          {retrying.has(item.take.id) ? (
-                            <Loader2 className="size-3 animate-spin" />
-                          ) : (
-                            <RotateCcw className="size-3" />
-                          )}
-                          重做
-                        </Button>
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-9 gap-1 text-sm"
+                            onClick={() => handleRetry(item)}
+                            disabled={retrying.has(item.take.id)}
+                          >
+                            {retrying.has(item.take.id) ? (
+                              <Loader2 className="size-3 animate-spin" />
+                            ) : (
+                              <RotateCcw className="size-3" />
+                            )}
+                            重做
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-9 text-sm text-amber-700"
+                            onClick={() => handleRetryWithGuidance(item)}
+                            disabled={retrying.has(item.take.id)}
+                          >
+                            按建议重做
+                          </Button>
+                        </>
                       )}
                       {item.review.verdict === "fail" && item.review.suggestion !== "must-redo" && (
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="h-7 text-xs text-amber-500 hover:text-amber-500"
+                          className="h-9 text-sm text-amber-500 hover:text-amber-500"
                           onClick={() => handleAcceptMinor(item)}
                         >
                           <CheckCircle2 className="size-3 mr-1" />

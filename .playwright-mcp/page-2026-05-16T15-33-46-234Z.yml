@@ -1,0 +1,142 @@
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e6]:
+      - link [ref=e68] [cursor=pointer]:
+        - /url: /
+        - img [ref=e10]
+        - generic [ref=e15]:
+          - paragraph [ref=e16]: AI Director
+          - paragraph [ref=e17]: Studio v0.1
+      - separator [ref=e18]
+      - generic [ref=e19]:
+        - list [ref=e21]:
+          - listitem [ref=e22]:
+            - link [ref=e69] [cursor=pointer]:
+              - /url: /
+              - img [ref=e24]
+              - generic [ref=e27]: 所有项目
+        - generic [ref=e28]:
+          - generic [ref=e29]: 最近项目
+          - list [ref=e31]:
+            - listitem [ref=e70]:
+              - link [ref=e71] [cursor=pointer]:
+                - /url: /projects/784ad742-6286-450e-832c-3aed30c50058
+                - img [ref=e72]
+                - generic [ref=e74]: 天荒烬雪图
+                - generic [ref=e75]: 1集
+            - listitem [ref=e76]:
+              - link [ref=e77] [cursor=pointer]:
+                - /url: /projects/272f523b-3877-4892-a0fa-dfaf33fb097b
+                - img [ref=e78]
+                - generic [ref=e80]: 烬骨照山河
+                - generic [ref=e81]: 1集
+      - generic [ref=e34]: AI Director Studio v0.1.0
+    - generic [ref=e35]:
+      - banner [ref=e36]:
+        - button [ref=e82]:
+          - img
+          - generic [ref=e38]: Toggle Sidebar
+        - separator [ref=e39]
+        - generic [ref=e40]:
+          - img [ref=e41]
+          - generic [ref=e43]: 选择项目
+      - main [ref=e44]:
+        - generic [ref=e45]:
+          - generic [ref=e46]:
+            - generic [ref=e47]:
+              - link [ref=e48] [cursor=pointer]:
+                - /url: /projects/784ad742-6286-450e-832c-3aed30c50058
+                - button [ref=e49]:
+                  - img
+              - generic [ref=e50]:
+                - heading [level=1] [ref=e83]: Prompt 模板库
+                - paragraph [ref=e52]: 结构化 Prompt 模板可跨集复用，让图像、视频、音频与剧本生成保持一致的指令风格。
+            - generic [ref=e54]:
+              - button [ref=e84]:
+                - img
+                - text: 全局库导入
+              - button [ref=e85]:
+                - img
+                - text: 新建模板
+          - generic [ref=e87]:
+            - img [ref=e89]
+            - generic [ref=e92]:
+              - paragraph [ref=e93]: 还没有模板
+              - paragraph [ref=e94]: 创建结构化 Prompt 模板，减少跨集重复手写。
+            - button [ref=e96]:
+              - img
+              - text: 创建第一个模板
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e64] [cursor=pointer]:
+    - img [ref=e65]
+  - alert [ref=e97]
+  - dialog "新建模板" [ref=e101]:
+    - heading "新建模板" [level=2] [ref=e103]
+    - generic [ref=e104]:
+      - generic [ref=e105]:
+        - generic [ref=e106]:
+          - generic [ref=e107]: 模板名称 *
+          - textbox "例：写实都市近景女主模板" [active] [ref=e108]
+        - generic [ref=e109]:
+          - generic [ref=e110]: 适用类型
+          - combobox [ref=e111]:
+            - generic [ref=e112]: 图像生成
+            - img: ▼
+          - textbox [ref=e113]: image
+      - separator [ref=e114]
+      - generic [ref=e115]:
+        - generic [ref=e116]:
+          - paragraph [ref=e117]: 结构化字段（组合后即为完整 Prompt）
+          - button "预览合成" [ref=e118]:
+            - img
+            - text: 预览合成
+        - generic [ref=e119]:
+          - generic [ref=e120]:
+            - generic [ref=e121]:
+              - generic [ref=e122]: 风格前缀
+              - generic [ref=e123]: 例：cinematic, dramatic lighting, film grain, ultra-detailed
+            - textbox "例：cinematic, dramatic lighting, film grain, ultra-detailed" [ref=e124]
+          - generic [ref=e125]:
+            - generic [ref=e126]:
+              - generic [ref=e127]: 角色锚点
+              - generic [ref=e128]: 固定角色外貌的核心词，会覆盖角色圣经 basePrompt
+            - textbox "固定角色外貌的核心词，会覆盖角色圣经 basePrompt" [ref=e129]
+          - generic [ref=e130]:
+            - generic [ref=e131]:
+              - generic [ref=e132]: 镜头描述
+              - generic [ref=e133]: 景别/机位关键词：close-up shot, low angle, static camera
+            - textbox "景别/机位关键词：close-up shot, low angle, static camera" [ref=e134]
+          - generic [ref=e135]:
+            - generic [ref=e136]:
+              - generic [ref=e137]: 场景描述
+              - generic [ref=e138]: 背景/环境/光线：urban office, daytime, natural light
+            - textbox "背景/环境/光线：urban office, daytime, natural light" [ref=e139]
+          - generic [ref=e140]:
+            - generic [ref=e141]:
+              - generic [ref=e142]: 行为描述
+              - generic [ref=e143]: 主体动作/姿态描述
+            - textbox "主体动作/姿态描述" [ref=e144]
+          - generic [ref=e145]:
+            - generic [ref=e146]:
+              - generic [ref=e147]: 情绪描述
+              - generic [ref=e148]: 情绪/表情关键词：determined expression, teary eyes
+            - textbox "情绪/表情关键词：determined expression, teary eyes" [ref=e149]
+          - generic [ref=e150]:
+            - generic [ref=e151]:
+              - generic [ref=e152]: 技术质量后缀
+              - generic [ref=e153]: 8K resolution, hyperrealistic, award-winning photography
+            - textbox "8K resolution, hyperrealistic, award-winning photography" [ref=e154]
+          - generic [ref=e155]:
+            - generic [ref=e156]:
+              - generic [ref=e157]: 负面约束
+              - generic [ref=e158]: blurry, deformed hands, watermark, text overlay
+            - textbox "blurry, deformed hands, watermark, text overlay" [ref=e159]
+      - separator [ref=e160]
+      - generic [ref=e161]:
+        - button "取消" [ref=e162]
+        - button "创建模板" [ref=e163]:
+          - img
+          - text: 创建模板
+    - button "Close" [ref=e164]:
+      - img
+      - generic [ref=e165]: Close

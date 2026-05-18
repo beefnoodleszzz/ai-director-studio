@@ -30,76 +30,43 @@ interface TTSOptions {
   language?: string;
 }
 
-class MiniMaxTTSProvider implements TTSProvider {
-  name = "minimax";
-  private apiKey = process.env.MINIMAX_API_KEY ?? process.env.HAILUO_API_KEY ?? "";
-  private baseUrl = process.env.MINIMAX_BASE_URL ?? "https://api.minimaxi.chat/v1";
+class DoubaoTTSProvider implements TTSProvider {
+  name = "doubao-tts";
+  private apiKey = process.env.DOUBAO_TTS_API_KEY ?? "";
+  private baseUrl = process.env.DOUBAO_TTS_BASE_URL ?? "https://ark.cn-beijing.volces.com/api/v3";
 
   async synthesize(text: string, options: TTSOptions) {
     if (!this.apiKey) throw new Error("MINIMAX_API_KEY is not configured");
 
+    const model = process.env.TTS_MODEL ?? "doubao-voice-lite-tts";
     const response = await axios.post(
-      `${this.baseUrl}/t2a_v2`,
+      `${this.baseUrl}/audio/speech`,
       {
-        model: "speech-02-hd",
-        text,
-        voice_setting: {
-          voice_id: options.voiceId ?? "Calm_Woman",
-          speed: options.speed ?? 1.0,
-          vol: options.volume ?? 1.0,
-        },
-        audio_setting: { format: "mp3", sample_rate: 32000 },
+        model,
+        input: text,
+        voice: options.voiceId ?? "zh_female_doubao",
+        response_format: "mp3",
+        speed: options.speed ?? 1,
       },
       {
         headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
         timeout: 60_000,
+        responseType: "arraybuffer",
       }
     );
 
-    const hexData: string = response.data?.data?.audio;
-    if (!hexData) throw new Error("MiniMax TTS returned no audio data");
-
-    const buffer = Buffer.from(hexData, "hex");
+    const buffer = Buffer.from(response.data);
     const base64 = buffer.toString("base64");
     return { base64 };
   }
 }
 
-class FishAudioProvider implements TTSProvider {
-  name = "fish-audio";
-  private apiKey = process.env.FISH_AUDIO_API_KEY ?? "";
-  private baseUrl = process.env.FISH_AUDIO_BASE_URL ?? "https://api.fish.audio/v1";
-
-  async synthesize(text: string, options: TTSOptions) {
-    if (!this.apiKey) throw new Error("FISH_AUDIO_API_KEY is not configured");
-
-    const response = await axios.post(
-      `${this.baseUrl}/tts`,
-      {
-        text,
-        reference_id: options.voiceId,
-        format: "mp3",
-        mp3_bitrate: 128,
-      },
-      {
-        headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
-        responseType: "arraybuffer",
-        timeout: 60_000,
-      }
-    );
-
-    const base64 = Buffer.from(response.data).toString("base64");
-    return { base64 };
-  }
-}
-
 const TTS_PROVIDERS: Record<string, TTSProvider> = {
-  minimax: new MiniMaxTTSProvider(),
-  "fish-audio": new FishAudioProvider(),
+  "doubao-tts": new DoubaoTTSProvider(),
 };
 
 function getTTSProvider(name?: string): TTSProvider {
-  const key = name ?? process.env.TTS_PROVIDER ?? "minimax";
+  const key = name ?? process.env.TTS_PROVIDER ?? "doubao-tts";
   const p = TTS_PROVIDERS[key];
   if (!p) throw new Error(`Unknown TTS provider: ${key}`);
   return p;
@@ -145,6 +112,10 @@ function qaAudio(localPath: string): { verdict: string; score: number; details: 
   } catch {
     return { verdict: "fail", score: 0, details: "Cannot read audio file" };
   }
+}
+
+function getShotPipelineStage(hasVideo: boolean) {
+  return hasVideo ? "ready_for_export" : "audio_generating";
 }
 
 // ─── 主入口：为 Shot 生成对白音频 ────────────────────────────────────────────
@@ -217,6 +188,31 @@ export async function generateShotAudio(input: AudioGenInput): Promise<GenerateA
     },
   });
 
+  await prisma.shot.update({
+    where: { id: shotId },
+    data: {
+      adoptedAudioTakeId: take.id,
+      pipelineStage: getShotPipelineStage(shot.hasMotionVideo),
+      ...(qa.verdict === "fail"
+        ? {
+            exportReadiness: "blocked",
+            blockReason: "audio-qa-failed",
+            blockMeta: JSON.stringify({
+              code: "audio-qa-failed",
+              message: qa.details,
+              stage: "audio",
+              shotId,
+              takeId: take.id,
+              details: [qa.details],
+            }),
+          }
+        : {
+            exportReadiness: shot.exportReadiness === "blocked" ? "blocked" : "ready",
+            ...(shot.blockReason === "audio-qa-failed" ? { blockReason: "", blockMeta: "" } : {}),
+          }),
+    },
+  });
+
   await prisma.review.create({
     data: {
       takeId: take.id,
@@ -285,7 +281,19 @@ export async function generateShotAudioWithTask(input: AudioGenInput) {
       projectId: input.projectId,
       shotId: input.shotId,
       taskType: "audio",
-      inputRef: { shotId: input.shotId, provider: input.provider },
+      taskStage: "audio",
+      inputRef: {
+        projectId: input.projectId,
+        episodeId: input.episodeId,
+        sceneId: input.sceneId,
+        shotId: input.shotId,
+        dialogue: input.dialogue,
+        audioPrompt: input.audioPrompt,
+        voiceId: input.voiceId,
+        provider: input.provider,
+        outputType: "audio",
+        stage: "audio",
+      },
     },
     () => generateShotAudio(input)
   );

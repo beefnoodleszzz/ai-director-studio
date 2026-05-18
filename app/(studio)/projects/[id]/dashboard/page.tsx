@@ -7,10 +7,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BarChart2, CheckCircle2, XCircle, AlertTriangle, RefreshCcw, Film, Clapperboard, ListTodo, ArrowRight } from "lucide-react";
+import { CheckCircle2, XCircle, AlertTriangle, RefreshCcw, Film, Clapperboard, ListTodo, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import axios from "axios";
 import { cn } from "@/lib/utils";
+import { ProjectPageShell } from "@/components/studio/ProjectPageShell";
 
 interface DashboardData {
   takeStats: {
@@ -74,7 +75,7 @@ export default function DashboardPage({ params }: { params: Promise<{ id: string
 
   if (loading || !data) {
     return (
-      <div className="p-6 max-w-5xl mx-auto space-y-4">
+      <div className="app-page-narrow py-8 space-y-4">
         {[1, 2, 3].map((i) => <Skeleton key={i} className="h-24 w-full rounded-lg" />)}
       </div>
     );
@@ -83,18 +84,17 @@ export default function DashboardPage({ params }: { params: Promise<{ id: string
   const { takeStats, shotStats, taskStats, providerStats } = data;
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold flex items-center gap-2">
-            <BarChart2 className="size-5" /> 生产指标看板
-          </h1>
-          <p className="text-xs text-muted-foreground mt-0.5">实时统计废片率、通过率与 Provider 效果</p>
-        </div>
+    <ProjectPageShell
+      title="生产指标看板"
+      description="实时查看废片率、通过率、任务负载与 Provider 表现，用桌面端一眼判断产线健康度。"
+      backHref={`/projects/${projectId}`}
+      contentClassName="app-page-narrow"
+      actions={
         <Button variant="ghost" size="sm" onClick={fetchData}>
           <RefreshCcw className="size-4 mr-1.5" /> 刷新
         </Button>
-      </div>
+      }
+    >
 
       {/* ── Take 质量 ── */}
       <section className="space-y-3">
@@ -269,7 +269,7 @@ export default function DashboardPage({ params }: { params: Promise<{ id: string
           </section>
         </>
       )}
-    </div>
+    </ProjectPageShell>
   );
 }
 

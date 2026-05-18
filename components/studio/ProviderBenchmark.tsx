@@ -79,12 +79,12 @@ export function ProviderBenchmark({ projectId }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-muted/15 p-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-2">
           <BarChart2 className="size-5 text-muted-foreground" />
           <div>
             <p className="font-semibold">Provider 效果基准</p>
-            <p className="text-xs text-muted-foreground">
+            <p className="type-meta text-muted-foreground">
               共统计 {totalTakes} 个 Take · 数据来自实际生成记录
             </p>
           </div>
@@ -105,7 +105,7 @@ export function ProviderBenchmark({ projectId }: Props) {
           <CardContent className="py-12 text-center text-muted-foreground text-sm">
             <BarChart2 className="size-8 mx-auto mb-3 opacity-30" />
             <p>暂无统计数据</p>
-            <p className="text-xs mt-1">生成一些 Take 后数据会自动积累</p>
+            <p className="type-meta mt-1">生成一些 Take 后数据会自动积累</p>
           </CardContent>
         </Card>
       ) : (
@@ -114,7 +114,7 @@ export function ProviderBenchmark({ projectId }: Props) {
             <p className="text-sm font-medium text-muted-foreground">
               {TYPE_LABELS[takeType] ?? takeType} 生成
             </p>
-            <div className="grid grid-cols-1 gap-3">
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
               {items.map((stat) => (
                 <Card key={`${stat.provider}-${stat.takeType}`}>
                   <CardContent className="pt-4 pb-4">
@@ -124,14 +124,14 @@ export function ProviderBenchmark({ projectId }: Props) {
                           <Badge variant="secondary" className="font-mono text-xs">
                             {stat.provider || "unknown"}
                           </Badge>
-                          <span className="text-sm text-muted-foreground">
+                          <span className="type-meta text-muted-foreground">
                             {stat.total} 次生成
                           </span>
                         </div>
 
                         {/* 通过率进度条 */}
                         <div className="space-y-1">
-                          <div className="flex items-center justify-between text-xs">
+                          <div className="flex items-center justify-between type-meta">
                             <span className="text-muted-foreground">通过率</span>
                             <span className={stat.passRate >= 70 ? "text-green-500 font-medium" : stat.passRate >= 40 ? "text-amber-500 font-medium" : "text-destructive font-medium"}>
                               {stat.passRate}%
@@ -145,7 +145,7 @@ export function ProviderBenchmark({ projectId }: Props) {
                       </div>
 
                       {/* 统计数字 */}
-                      <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs shrink-0">
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 type-meta shrink-0">
                         <div className="flex items-center gap-1 text-green-500">
                           <CheckCircle2 className="size-3" />
                           <span>{stat.passed} 通过</span>

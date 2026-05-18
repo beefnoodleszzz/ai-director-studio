@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { assembleWithTask } from "@/lib/workflows/assembly";
+import { assembleWithTask, previewShortDramaExport } from "@/lib/workflows/assembly";
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,6 +8,11 @@ export async function POST(req: NextRequest) {
       episodeId: string;
       aspect?: "16:9" | "9:16";
       bgmPath?: string;
+      previewOnly?: boolean;
+      minResolution?: {
+        width: number;
+        height: number;
+      };
     };
 
     const { projectId, episodeId } = body;
@@ -15,11 +20,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "projectId and episodeId are required" }, { status: 400 });
     }
 
+    if (body.previewOnly) {
+      const preview = await previewShortDramaExport({
+        projectId,
+        episodeId,
+        aspect: body.aspect,
+        bgmPath: body.bgmPath,
+        minResolution: body.minResolution,
+      });
+      return NextResponse.json(preview);
+    }
+
     const { taskId, result } = await assembleWithTask({
       projectId,
       episodeId,
       aspect: body.aspect,
       bgmPath: body.bgmPath,
+      minResolution: body.minResolution,
     });
 
     return NextResponse.json({ taskId, ...result });

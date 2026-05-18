@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +36,23 @@ import axios from "axios";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { ShotTimeline } from "@/components/studio/ShotTimeline";
+import { MediaPreview } from "@/components/studio/MediaPreview";
+import {
+  parseBlockMeta,
+  type BlockMeta,
+  type ShotPipelineStage,
+} from "@/lib/studio-contracts";
+
+const IMAGE_PROVIDER_LABELS: Record<string, string> = {
+  seedream: "Seedream",
+  flux: "Flux",
+  midjourney: "Midjourney",
+  dalle3: "DALL·E 3",
+};
+
+const VIDEO_PROVIDER_LABELS: Record<string, string> = {
+  seedance: "Seedance",
+};
 
 export interface TakeData {
   id: string;
@@ -50,6 +66,13 @@ export interface TakeData {
   isAdopted: boolean;
   isDiscarded: boolean;
   createdAt: string;
+  paramsSnapshotJson?: {
+    retryStrategy?: {
+      promptHints?: string[];
+      preferredAssetTypes?: string[];
+      disableContinuityReference?: boolean;
+    };
+  } | null;
   reviews: {
     id: string;
     reviewType: string;
@@ -73,16 +96,59 @@ export interface ShotData {
   visualPrompt: string;
   audioPrompt: string;
   dialogue: string;
-  adoptedTakeId: string | null;
+  adoptedTakeId?: string | null;
+  adoptedImageTakeId?: string | null;
+  adoptedVideoTakeId?: string | null;
+  adoptedAudioTakeId?: string | null;
   status: string;
   readiness: string;
+  pipelineStage?: ShotPipelineStage | string | null;
+  blockReason?: string | null;
+  blockMeta?: string | BlockMeta | null;
   takes: TakeData[];
+}
+
+const PIPELINE_STAGE_LABELS: Record<string, string> = {
+  draft: "待开始",
+  image_generating: "首帧生成中",
+  image_ready: "首帧已就绪",
+  video_generating: "视频生成中",
+  video_ready: "视频已就绪",
+  audio_generating: "音频生成中",
+  blocked_for_review: "待人工复核",
+  ready_for_export: "可导出",
+};
+
+const BLOCK_REASON_LABELS: Record<string, string> = {
+  "missing-character-assets": "角色资产不完整",
+  "image-qa-failed": "首帧质检未通过",
+  "video-qa-failed": "视频质检未通过",
+  "audio-qa-failed": "音频质检未通过",
+  "continuity-check-failed": "连续性质检未通过",
+  "manual-review-required": "需要人工确认",
+};
+
+function getAdoptedTakeId(shot: ShotData, takeType: "image" | "video" | "audio") {
+  const direct =
+    takeType === "image"
+      ? shot.adoptedImageTakeId
+      : takeType === "video"
+        ? shot.adoptedVideoTakeId
+        : shot.adoptedAudioTakeId;
+  if (direct) return direct;
+  return shot.takes.find((take) => take.takeType === takeType && take.isAdopted)?.id ?? null;
+}
+
+function getBlockMeta(shot: ShotData): BlockMeta | null {
+  if (!shot.blockMeta) return null;
+  if (typeof shot.blockMeta === "string") return parseBlockMeta(shot.blockMeta);
+  return shot.blockMeta;
 }
 
 interface TakeCardProps {
   take: TakeData;
   isAdopted: boolean;
-  onAdopt: (takeId: string) => void;
+  onAdopt: (takeId: string, takeType: string) => void;
   onDiscard: (takeId: string) => void;
 }
 
@@ -99,34 +165,29 @@ function TakeCard({ take, isAdopted, onAdopt, onDiscard }: TakeCardProps) {
       )}
     >
       {/* 媒体预览 */}
-      <div className="relative aspect-[9/16] bg-muted">
+      <div className="relative aspect-[4/5] bg-muted lg:aspect-[3/4]">
         {take.localImage ? (
-          <Image
-            src={take.localImage}
-            alt="Take preview"
-            fill
-            className="object-cover"
-            unoptimized
+          <MediaPreview
+            type={take.localVideo ? "video" : "image"}
+            src={take.localVideo ?? take.localImage}
+            poster={take.localImage}
+            title="Take preview"
+            className="absolute inset-0"
           />
         ) : (
           <div className="flex items-center justify-center h-full text-muted-foreground">
             <ImageIcon className="size-8" />
           </div>
         )}
-        {take.localVideo && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-            <Video className="size-8 text-white" />
-          </div>
-        )}
         {isAdopted && (
           <div className="absolute top-2 left-2">
-            <Badge className="text-[10px] px-1.5 py-0 bg-primary">已采用</Badge>
+            <Badge className="text-xs px-1.5 py-0 bg-primary">已采用</Badge>
           </div>
         )}
         <div className="absolute top-2 right-2">
           <Badge
             variant="outline"
-            className={cn("text-[10px] px-1.5 py-0 bg-background/80", verdictColor)}
+            className={cn("text-xs px-1.5 py-0 bg-background/80", verdictColor)}
           >
             {verdict === "pass" ? "通过" : verdict === "warn" ? "可用" : verdict === "fail" ? "失败" : "待审"}
           </Badge>
@@ -134,23 +195,31 @@ function TakeCard({ take, isAdopted, onAdopt, onDiscard }: TakeCardProps) {
       </div>
 
       {/* 底部信息 */}
-      <div className="p-2 space-y-1.5">
-        <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-          <span>{take.provider || "unknown"}</span>
+      <div className="space-y-2 p-3">
+        <div className="flex items-center justify-between type-meta text-muted-foreground">
+          <span className="truncate">{take.provider || "unknown"}</span>
           <div className="flex items-center gap-0.5">
             <Star className="size-3 text-amber-400" />
             <span>{(take.autoScore * 10).toFixed(1)}</span>
           </div>
         </div>
         {take.reviews?.[0]?.details && (
-          <p className="text-[10px] text-muted-foreground truncate">{take.reviews[0].details}</p>
+          <p className="type-caption text-muted-foreground truncate">{take.reviews[0].details}</p>
+        )}
+        {take.paramsSnapshotJson?.retryStrategy?.promptHints?.length ? (
+          <p className="type-caption text-amber-700 truncate">
+            重试策略：{take.paramsSnapshotJson.retryStrategy.promptHints[0]}
+          </p>
+        ) : null}
+        {take.localAudio && (
+          <MediaPreview type="audio" src={take.localAudio} className="mt-1" />
         )}
         <div className="flex gap-1">
           <Button
             size="sm"
             variant={isAdopted ? "default" : "outline"}
-            className="flex-1 h-6 text-[10px]"
-            onClick={() => onAdopt(take.id)}
+            className="flex-1 h-7 text-xs"
+            onClick={() => onAdopt(take.id, take.takeType)}
             disabled={isAdopted}
           >
             {isAdopted ? <CheckCircle2 className="size-3 mr-1" /> : null}
@@ -159,7 +228,7 @@ function TakeCard({ take, isAdopted, onAdopt, onDiscard }: TakeCardProps) {
           <Button
             size="sm"
             variant="ghost"
-            className="h-6 px-2 text-[10px] text-muted-foreground"
+            className="h-7 px-2 text-xs text-muted-foreground"
             onClick={() => onDiscard(take.id)}
             disabled={take.isDiscarded}
           >
@@ -177,14 +246,26 @@ interface ShotCardProps {
   episodeId: string;
   sceneId: string;
   onUpdate: (shot: ShotData) => void;
+  isHighlighted?: boolean;
+  highlightReason?: string;
+  highlightRecommendation?: string;
 }
 
-function ShotCard({ shot, projectId, episodeId, sceneId, onUpdate }: ShotCardProps) {
-  const [expanded, setExpanded] = useState(false);
+function ShotCard({
+  shot,
+  projectId,
+  episodeId,
+  sceneId,
+  onUpdate,
+  isHighlighted = false,
+  highlightReason,
+  highlightRecommendation,
+}: ShotCardProps) {
+  const [expanded, setExpanded] = useState(isHighlighted);
   const [generatingImage, setGeneratingImage] = useState(false);
   const [generatingVideo, setGeneratingVideo] = useState(false);
   const [provider, setProvider] = useState("seedream");
-  const [videoProvider, setVideoProvider] = useState("kling");
+  const [videoProvider, setVideoProvider] = useState("seedance");
   const [compareOpen, setCompareOpen] = useState(false);
   const [recommendedProvider, setRecommendedProvider] = useState<string | null>(null);
   const [recommendReason, setRecommendReason] = useState<string>("");
@@ -210,8 +291,26 @@ function ShotCard({ shot, projectId, episodeId, sceneId, onUpdate }: ShotCardPro
     return () => { cancelled = true; };
   }, [projectId]);
 
+  useEffect(() => {
+    if (isHighlighted) {
+      setExpanded(true);
+    }
+  }, [isHighlighted]);
+
   const imageTakes = shot.takes.filter((t) => t.takeType === "image");
   const videoTakes = shot.takes.filter((t) => t.takeType === "video");
+  const audioTakes = shot.takes.filter((t) => t.takeType === "audio");
+  const adoptedImageTakeId = getAdoptedTakeId(shot, "image");
+  const adoptedVideoTakeId = getAdoptedTakeId(shot, "video");
+  const adoptedAudioTakeId = getAdoptedTakeId(shot, "audio");
+  const pipelineLabel = PIPELINE_STAGE_LABELS[shot.pipelineStage ?? ""] ?? shot.pipelineStage ?? "未标记";
+  const blockMeta = getBlockMeta(shot);
+  const blockSummary =
+    blockMeta?.message ||
+    (shot.blockReason ? BLOCK_REASON_LABELS[shot.blockReason] ?? shot.blockReason : null);
+  const adoptedPreviewTakes = [adoptedImageTakeId, adoptedVideoTakeId, adoptedAudioTakeId]
+    .map((id) => shot.takes.find((take) => take.id === id))
+    .filter((take): take is TakeData => Boolean(take));
 
   const handleGenerateImage = async () => {
     setGeneratingImage(true);
@@ -236,7 +335,7 @@ function ShotCard({ shot, projectId, episodeId, sceneId, onUpdate }: ShotCardPro
   };
 
   const handleGenerateVideo = async () => {
-    const imageTake = shot.takes.find((t) => t.takeType === "image" && t.isAdopted);
+    const imageTake = shot.takes.find((t) => t.id === adoptedImageTakeId);
     if (!imageTake) { toast.error("请先采用一个首帧候选"); return; }
 
     setGeneratingVideo(true);
@@ -260,13 +359,22 @@ function ShotCard({ shot, projectId, episodeId, sceneId, onUpdate }: ShotCardPro
     }
   };
 
-  const handleAdopt = async (takeId: string) => {
+  const handleAdopt = async (takeId: string, takeType: string) => {
     try {
-      await axios.post(`/api/shots/${shot.id}/adopt`, { takeId });
+      await axios.post(`/api/shots/${shot.id}/adopt`, { takeId, takeType });
       onUpdate({
         ...shot,
-        adoptedTakeId: takeId,
-        takes: shot.takes.map((t) => ({ ...t, isAdopted: t.id === takeId })),
+        adoptedTakeId: takeType === "image" ? takeId : shot.adoptedTakeId ?? null,
+        adoptedImageTakeId: takeType === "image" ? takeId : adoptedImageTakeId,
+        adoptedVideoTakeId: takeType === "video" ? takeId : adoptedVideoTakeId,
+        adoptedAudioTakeId: takeType === "audio" ? takeId : adoptedAudioTakeId,
+        pipelineStage:
+          takeType === "image" ? "image_ready" : takeType === "video" ? "video_ready" : "ready_for_export",
+        takes: shot.takes.map((t) => ({
+          ...t,
+          isAdopted: t.takeType === takeType ? t.id === takeId : t.isAdopted,
+          isDiscarded: t.id === takeId ? false : t.isDiscarded,
+        })),
       });
       toast.success("已设为采用");
     } catch {
@@ -290,31 +398,47 @@ function ShotCard({ shot, projectId, episodeId, sceneId, onUpdate }: ShotCardPro
   };
 
   return (
-    <Card className={cn("overflow-hidden", shot.status === "error" && "border-destructive/40")}>
-      <CardHeader className="py-2.5 px-4 bg-muted/20 border-b">
+    <Card
+      className={cn(
+        "overflow-hidden",
+        shot.status === "error" && "border-destructive/40",
+        shot.pipelineStage === "blocked_for_review" && "border-amber-500/40",
+        isHighlighted && "ring-2 ring-primary border-primary/50"
+      )}
+    >
+      <CardHeader className="border-b bg-muted/20 px-4 py-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="font-mono text-xs text-muted-foreground shrink-0">
+            <span className="font-mono type-meta text-muted-foreground shrink-0">
               #{shot.shotOrder.toString().padStart(2, "0")}
             </span>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
+            <Badge variant="outline" className="text-xs px-1.5 py-0 shrink-0">
               {shot.shotType || "MS"}
+            </Badge>
+            <Badge
+              variant={shot.pipelineStage === "blocked_for_review" ? "destructive" : "secondary"}
+              className="text-xs px-1.5 py-0 shrink-0"
+            >
+              {pipelineLabel}
             </Badge>
             <p className="text-sm font-medium truncate">{shot.actionDesc || shot.visualPrompt.slice(0, 60)}</p>
           </div>
           <div className="flex items-center gap-1 shrink-0">
             {imageTakes.length > 0 && (
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+              <Badge variant="secondary" className="text-xs px-1.5 py-0">
                 图×{imageTakes.length}
               </Badge>
             )}
             {videoTakes.length > 0 && (
-              <Badge className="text-[10px] px-1.5 py-0">视频×{videoTakes.length}</Badge>
+              <Badge className="text-xs px-1.5 py-0">视频×{videoTakes.length}</Badge>
+            )}
+            {audioTakes.length > 0 && (
+              <Badge variant="outline" className="text-xs px-1.5 py-0">音频×{audioTakes.length}</Badge>
             )}
             <Button
               size="sm"
               variant="ghost"
-              className="h-6 px-2 text-[10px]"
+              className="h-7 px-2 text-xs"
               onClick={() => setExpanded(!expanded)}
             >
               <ChevronRight className={cn("size-3.5 transition-transform", expanded && "rotate-90")} />
@@ -325,35 +449,104 @@ function ShotCard({ shot, projectId, episodeId, sceneId, onUpdate }: ShotCardPro
 
       {expanded && (
         <CardContent className="p-4 space-y-4">
-          {/* Prompt 显示 */}
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Visual Prompt</Label>
-            <p className="text-xs font-mono bg-muted/50 rounded p-2 leading-relaxed">{shot.visualPrompt}</p>
-          </div>
-          {shot.dialogue && (
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">对白</Label>
-              <p className="text-sm">「{shot.dialogue}」</p>
+          {isHighlighted && (highlightReason || highlightRecommendation) ? (
+            <div className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3">
+              <p className="text-sm font-medium text-primary">从导出前检查定位到此镜头</p>
+              {highlightReason ? (
+                <p className="mt-1 text-sm text-foreground">风险原因：{highlightReason}</p>
+              ) : null}
+              {highlightRecommendation ? (
+                <p className="mt-1 text-sm text-muted-foreground">建议动作：{highlightRecommendation}</p>
+              ) : null}
+            </div>
+          ) : null}
+          {(shot.pipelineStage === "blocked_for_review" || blockSummary) && (
+            <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline" className="border-amber-500/40 text-amber-700">
+                  流水线阻断
+                </Badge>
+                {blockMeta?.stage ? (
+                  <span className="type-meta text-amber-800/80">阶段：{blockMeta.stage}</span>
+                ) : null}
+              </div>
+              <p className="mt-2 text-sm text-amber-900">{blockSummary ?? "等待人工复核"}</p>
+              {blockMeta?.details?.length ? (
+                <ul className="mt-2 space-y-1 text-xs text-amber-900/80">
+                  {blockMeta.details.slice(0, 3).map((detail) => (
+                    <li key={detail}>• {detail}</li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
           )}
+
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(19rem,0.95fr)]">
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label className="type-meta text-muted-foreground">Visual Prompt</Label>
+                <p className="rounded-xl bg-muted/50 p-3 font-mono type-meta leading-relaxed">{shot.visualPrompt}</p>
+              </div>
+              {shot.dialogue && (
+                <div className="space-y-1.5">
+                  <Label className="type-meta text-muted-foreground">对白</Label>
+                  <p className="type-body-strong">「{shot.dialogue}」</p>
+                </div>
+              )}
+            </div>
+
+            {adoptedPreviewTakes.length > 0 && (() => {
+              return (
+                <div className="space-y-1.5">
+                  <Label className="type-meta text-muted-foreground">采用结果预览</Label>
+                  <div className="grid gap-3">
+                    {adoptedPreviewTakes.map((adopted) => (
+                      <div key={adopted.id} className="space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs px-1.5 py-0">
+                            {adopted.takeType === "image" ? "首帧采用" : adopted.takeType === "video" ? "视频采用" : "音频采用"}
+                          </Badge>
+                          <span className="type-meta text-muted-foreground">{adopted.provider}</span>
+                        </div>
+                        {(adopted.localVideo || adopted.localImage) && (
+                          <MediaPreview
+                            type={adopted.localVideo ? "video" : "image"}
+                            src={adopted.localVideo ?? adopted.localImage}
+                            poster={adopted.localImage}
+                            className="aspect-video"
+                          />
+                        )}
+                        {adopted.localAudio && (
+                          <MediaPreview type="audio" src={adopted.localAudio} />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
 
           <Separator />
 
           {/* 生成操作 */}
-          <div className="flex flex-wrap gap-2 items-end">
-            <div className="flex items-end gap-2">
-              <div className="space-y-1">
-                <Label className="text-xs flex items-center gap-1">
+          <div className="rounded-2xl border border-border/60 bg-muted/15 p-3">
+            <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] xl:items-end">
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="space-y-1">
+                <Label className="type-meta flex items-center gap-1">
                   图像 Provider
                   {recommendedProvider && recommendedProvider === provider && (
-                    <span className="text-[9px] text-green-600 bg-green-50 px-1 py-0.5 rounded" title={recommendReason}>
+                    <span className="type-caption text-green-600 bg-green-50 px-1 py-0.5 rounded" title={recommendReason}>
                       推荐
                     </span>
                   )}
                 </Label>
                 <Select value={provider} onValueChange={(v) => v && setProvider(v)}>
-                  <SelectTrigger className="h-8 w-32 text-xs">
-                    <SelectValue />
+                  <SelectTrigger className="h-9 w-36 text-sm">
+                    <SelectValue>
+                      {IMAGE_PROVIDER_LABELS[provider] ?? provider}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="seedream">Seedream</SelectItem>
@@ -363,72 +556,78 @@ function ShotCard({ shot, projectId, episodeId, sceneId, onUpdate }: ShotCardPro
                   </SelectContent>
                 </Select>
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleGenerateImage}
-                disabled={generatingImage}
-              >
-                {generatingImage ? (
-                  <Loader2 className="size-3.5 animate-spin mr-1" />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleGenerateImage}
+                  disabled={generatingImage}
+                  className="h-9"
+                >
+                  {generatingImage ? (
+                    <Loader2 className="size-3.5 animate-spin mr-1" />
                 ) : (
                   <Wand2 className="size-3.5 mr-1" />
                 )}
                 生成首帧
               </Button>
-            </div>
+              </div>
 
-            <div className="flex items-end gap-2">
-              <div className="space-y-1">
-                <Label className="text-xs">视频 Provider</Label>
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="space-y-1">
+                <Label className="type-meta">视频 Provider</Label>
                 <Select value={videoProvider} onValueChange={(v) => v && setVideoProvider(v)}>
-                  <SelectTrigger className="h-8 w-24 text-xs">
-                    <SelectValue />
+                  <SelectTrigger className="h-9 w-28 text-sm">
+                    <SelectValue>
+                      {VIDEO_PROVIDER_LABELS[videoProvider] ?? videoProvider}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="kling">Kling</SelectItem>
-                    <SelectItem value="hailuo">Hailuo</SelectItem>
+                    <SelectItem value="seedance">Seedance</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <Button
-                size="sm"
-                onClick={handleGenerateVideo}
-                disabled={generatingVideo || !shot.takes.some((t) => t.takeType === "image" && t.isAdopted)}
-              >
-                {generatingVideo ? (
-                  <Loader2 className="size-3.5 animate-spin mr-1" />
+                <Button
+                  size="sm"
+                  onClick={handleGenerateVideo}
+                  disabled={generatingVideo || !adoptedImageTakeId}
+                  className="h-9"
+                >
+                  {generatingVideo ? (
+                    <Loader2 className="size-3.5 animate-spin mr-1" />
                 ) : (
                   <Video className="size-3.5 mr-1" />
                 )}
                 生成视频
               </Button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                {shot.dialogue && (
+                  <Button size="sm" variant="outline" className="h-9" disabled>
+                    <Volume2 className="size-3.5 mr-1" />
+                    配音入口待接线
+                  </Button>
+                )}
+
+                {(imageTakes.length > 1 || videoTakes.length > 1) && (
+                  <Button size="sm" variant="ghost" className="h-9" onClick={() => setCompareOpen(true)}>
+                    对比版本
+                  </Button>
+                )}
+              </div>
             </div>
-
-            {shot.dialogue && (
-              <Button size="sm" variant="outline">
-                <Volume2 className="size-3.5 mr-1" />
-                生成配音
-              </Button>
-            )}
-
-            {(imageTakes.length > 1 || videoTakes.length > 1) && (
-              <Button size="sm" variant="ghost" onClick={() => setCompareOpen(true)}>
-                对比版本
-              </Button>
-            )}
           </div>
 
           {/* Take 瀑布流 */}
           {imageTakes.length > 0 && (
             <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">首帧候选</Label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+              <Label className="type-meta text-muted-foreground">首帧候选</Label>
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
                 {imageTakes.map((take) => (
                   <TakeCard
                     key={take.id}
                     take={take}
-                    isAdopted={take.isAdopted}
+                    isAdopted={take.id === adoptedImageTakeId}
                     onAdopt={handleAdopt}
                     onDiscard={handleDiscard}
                   />
@@ -439,13 +638,30 @@ function ShotCard({ shot, projectId, episodeId, sceneId, onUpdate }: ShotCardPro
 
           {videoTakes.length > 0 && (
             <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">视频候选</Label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+              <Label className="type-meta text-muted-foreground">视频候选</Label>
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
                 {videoTakes.map((take) => (
                   <TakeCard
                     key={take.id}
                     take={take}
-                    isAdopted={take.isAdopted}
+                    isAdopted={take.id === adoptedVideoTakeId}
+                    onAdopt={handleAdopt}
+                    onDiscard={handleDiscard}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {audioTakes.length > 0 && (
+            <div className="space-y-2">
+              <Label className="type-meta text-muted-foreground">音频候选</Label>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {audioTakes.map((take) => (
+                  <TakeCard
+                    key={take.id}
+                    take={take}
+                    isAdopted={take.id === adoptedAudioTakeId}
                     onAdopt={handleAdopt}
                     onDiscard={handleDiscard}
                   />
@@ -458,16 +674,22 @@ function ShotCard({ shot, projectId, episodeId, sceneId, onUpdate }: ShotCardPro
 
       {/* 多版本对比 Dialog */}
       <Dialog open={compareOpen} onOpenChange={setCompareOpen}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="max-w-6xl">
           <DialogHeader>
             <DialogTitle>版本对比 · 镜头 #{shot.shotOrder}</DialogTitle>
           </DialogHeader>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-[60vh] overflow-y-auto">
-            {[...imageTakes, ...videoTakes].map((take) => (
+          <div className="grid max-h-[70vh] grid-cols-2 gap-3 overflow-y-auto pr-1 md:grid-cols-3 xl:grid-cols-4">
+            {[...imageTakes, ...videoTakes, ...audioTakes].map((take) => (
               <TakeCard
                 key={take.id}
                 take={take}
-                isAdopted={take.isAdopted}
+                isAdopted={
+                  take.takeType === "image"
+                    ? take.id === adoptedImageTakeId
+                    : take.takeType === "video"
+                      ? take.id === adoptedVideoTakeId
+                      : take.id === adoptedAudioTakeId
+                }
                 onAdopt={handleAdopt}
                 onDiscard={handleDiscard}
               />
@@ -482,6 +704,9 @@ function ShotCard({ shot, projectId, episodeId, sceneId, onUpdate }: ShotCardPro
 interface Props {
   projectId: string;
   episodeId: string;
+  highlightShotId?: string;
+  highlightReason?: string;
+  highlightRecommendation?: string;
   scene: {
     id: string;
     sceneOrder: number;
@@ -492,7 +717,14 @@ interface Props {
   };
 }
 
-export function ShotWorkbench({ projectId, episodeId, scene }: Props) {
+export function ShotWorkbench({
+  projectId,
+  episodeId,
+  scene,
+  highlightShotId,
+  highlightReason,
+  highlightRecommendation,
+}: Props) {
   const [shots, setShots] = useState<ShotData[]>(scene.shots);
   const [batchGenerating, setBatchGenerating] = useState(false);
   const [batchResult, setBatchResult] = useState<string | null>(null);
@@ -524,74 +756,99 @@ export function ShotWorkbench({ projectId, episodeId, scene }: Props) {
   const failedCount = shots.filter((s) =>
     s.takes.some((t) => t.reviews?.[0]?.verdict === "fail")
   ).length;
+  const blockedCount = shots.filter((s) => s.pipelineStage === "blocked_for_review").length;
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span className="font-mono">SC{scene.sceneOrder.toString().padStart(2, "0")}</span>
-          <span>·</span>
-          <span>{scene.location}</span>
-          {scene.timeOfDay && <Badge variant="outline" className="text-[10px]">{scene.timeOfDay}</Badge>}
-          {scene.summary && <span className="text-xs truncate max-w-[200px]">· {scene.summary}</span>}
-        </div>
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-border/60 bg-muted/15 p-4">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2 type-body text-muted-foreground">
+              <span className="font-mono">SC{scene.sceneOrder.toString().padStart(2, "0")}</span>
+              <span>·</span>
+              <span>{scene.location}</span>
+              {scene.timeOfDay && <Badge variant="outline" className="text-xs">{scene.timeOfDay}</Badge>}
+            </div>
+            {scene.summary ? (
+              <p className="max-w-4xl text-sm leading-6 text-muted-foreground">{scene.summary}</p>
+            ) : null}
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="secondary" className="px-2 py-0.5 text-xs">
+                {shots.length} 个镜头
+              </Badge>
+              <Badge variant="outline" className="px-2 py-0.5 text-xs">
+                {pendingCount} 个待采用
+              </Badge>
+              {blockedCount > 0 ? (
+                <Badge variant="outline" className="px-2 py-0.5 text-xs border-amber-500/40 text-amber-700">
+                  {blockedCount} 个待复核
+                </Badge>
+              ) : null}
+              {failedCount > 0 ? (
+                <Badge variant="destructive" className="px-2 py-0.5 text-xs">
+                  {failedCount} 个失败
+                </Badge>
+              ) : null}
+            </div>
+          </div>
 
-        {/* 视图切换 */}
-        <div className="flex items-center gap-1 shrink-0">
-          <Button
-            variant={viewMode === "list" ? "secondary" : "ghost"}
-            size="icon"
-            className="size-7"
-            title="列表视图"
-            onClick={() => setViewMode("list")}
-          >
-            <List className="size-4" />
-          </Button>
-          <Button
-            variant={viewMode === "timeline" ? "secondary" : "ghost"}
-            size="icon"
-            className="size-7"
-            title="时间线视图"
-            onClick={() => setViewMode("timeline")}
-          >
-            <AlignJustify className="size-4" />
-          </Button>
-        </div>
+          <div className="flex flex-col gap-3 xl:items-end">
+            <div className="flex items-center gap-1 rounded-xl border border-border/60 bg-background/60 p-1">
+              <Button
+                variant={viewMode === "list" ? "secondary" : "ghost"}
+                size="icon"
+                className="size-8"
+                title="列表视图"
+                onClick={() => setViewMode("list")}
+              >
+                <List className="size-4" />
+              </Button>
+              <Button
+                variant={viewMode === "timeline" ? "secondary" : "ghost"}
+                size="icon"
+                className="size-8"
+                title="时间线视图"
+                onClick={() => setViewMode("timeline")}
+              >
+                <AlignJustify className="size-4" />
+              </Button>
+            </div>
 
-        {/* 批量操作按钮 */}
-        <div className="flex items-center gap-2 shrink-0">
-          {failedCount > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
-              disabled={batchGenerating}
-              onClick={() => handleBatchGenerate(true)}
-            >
-              重做 {failedCount} 个失败镜头
-            </Button>
-          )}
-          {pendingCount > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs"
-              disabled={batchGenerating}
-              onClick={() => handleBatchGenerate(false)}
-            >
-              {batchGenerating ? (
-                <Loader2 className="size-3 mr-1 animate-spin" />
-              ) : (
-                <Wand2 className="size-3 mr-1" />
+            <div className="flex flex-wrap items-center gap-2">
+              {failedCount > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 text-sm text-destructive border-destructive/30 hover:bg-destructive/10"
+                  disabled={batchGenerating}
+                  onClick={() => handleBatchGenerate(true)}
+                >
+                  重做 {failedCount} 个失败镜头
+                </Button>
               )}
-              批量生成 ({pendingCount})
-            </Button>
-          )}
+              {pendingCount > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 text-sm"
+                  disabled={batchGenerating}
+                  onClick={() => handleBatchGenerate(false)}
+                >
+                  {batchGenerating ? (
+                    <Loader2 className="size-3 mr-1 animate-spin" />
+                  ) : (
+                    <Wand2 className="size-3 mr-1" />
+                  )}
+                  批量生成 ({pendingCount})
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
       {batchResult && (
-        <p className="text-xs text-muted-foreground bg-muted/50 rounded px-3 py-1.5">
+        <p className="type-meta text-muted-foreground bg-muted/50 rounded px-3 py-2">
           {batchResult}
         </p>
       )}
@@ -630,6 +887,9 @@ export function ShotWorkbench({ projectId, episodeId, scene }: Props) {
               episodeId={episodeId}
               sceneId={scene.id}
               onUpdate={handleShotUpdate}
+              isHighlighted={highlightShotId === shot.id}
+              highlightReason={highlightShotId === shot.id ? highlightReason : undefined}
+              highlightRecommendation={highlightShotId === shot.id ? highlightRecommendation : undefined}
             />
           ))}
           {shots.length === 0 && (

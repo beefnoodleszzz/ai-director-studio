@@ -1,0 +1,104 @@
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e6]:
+      - link "AI Director Studio v0.1" [active] [ref=e8] [cursor=pointer]:
+        - /url: /
+        - img [ref=e10]
+        - generic [ref=e15]:
+          - paragraph [ref=e16]: AI Director
+          - paragraph [ref=e17]: Studio v0.1
+      - separator [ref=e18]
+      - generic [ref=e19]:
+        - list [ref=e21]:
+          - listitem [ref=e22]:
+            - link "所有项目" [ref=e23] [cursor=pointer]:
+              - /url: /
+              - img [ref=e24]
+              - generic [ref=e27]: 所有项目
+        - generic [ref=e28]:
+          - generic [ref=e29]: 最近项目
+          - list [ref=e31]:
+            - listitem [ref=e68]:
+              - link "天荒烬雪图 1集" [ref=e69] [cursor=pointer]:
+                - /url: /projects/784ad742-6286-450e-832c-3aed30c50058
+                - img [ref=e70]
+                - generic [ref=e72]: 天荒烬雪图
+                - generic [ref=e73]: 1集
+            - listitem [ref=e74]:
+              - link "烬骨照山河 1集" [ref=e75] [cursor=pointer]:
+                - /url: /projects/272f523b-3877-4892-a0fa-dfaf33fb097b
+                - img [ref=e76]
+                - generic [ref=e78]: 烬骨照山河
+                - generic [ref=e79]: 1集
+      - generic [ref=e34]: AI Director Studio v0.1.0
+    - generic [ref=e35]:
+      - banner [ref=e36]:
+        - button "Toggle Sidebar" [ref=e37]:
+          - img
+          - generic [ref=e38]: Toggle Sidebar
+        - separator [ref=e39]
+        - generic [ref=e40]:
+          - img [ref=e41]
+          - generic [ref=e43]: 选择项目
+      - main [ref=e44]:
+        - generic [ref=e45]:
+          - generic [ref=e46]:
+            - generic [ref=e47]:
+              - heading "影视项目" [level=1] [ref=e48]
+              - paragraph [ref=e49]: 管理你的 AI 短剧 / 漫剧创作项目
+            - button "新建项目" [ref=e50]:
+              - img
+              - text: 新建项目
+          - generic [ref=e51]:
+            - generic [ref=e80]:
+              - generic [ref=e81]:
+                - generic [ref=e82]:
+                  - img [ref=e84]
+                  - button [ref=e86]:
+                    - img [ref=e87]
+                - generic [ref=e90] [cursor=pointer]: 天荒烬雪图
+                - generic [ref=e91] [cursor=pointer]: 太初之后，诸天曾爆发一场被彻底抹去的“天荒之战”。九重天塌陷，群星坠海，万族仙骨尽焚，天地只剩一卷禁忌古图《天荒烬雪图》。三万年后，仙门以“天道重序”维持盛世，实则以众生命火填补天穹裂口。如今古图重现人间，所有被掩埋的旧日真相即将再次撕开天地。
+              - generic [ref=e92] [cursor=pointer]:
+                - generic [ref=e93]:
+                  - generic [ref=e94]:
+                    - generic [ref=e95]:
+                      - img [ref=e96]
+                      - generic [ref=e101]: 1 集
+                      - generic [ref=e102]: 1 完成
+                    - generic [ref=e103]:
+                      - img [ref=e104]
+                      - generic [ref=e109]: 3 角色
+                  - generic [ref=e110]:
+                    - img [ref=e111]
+                    - generic [ref=e114]: 2026/5/16
+                - generic [ref=e115]:
+                  - generic [ref=e116]: 漫剧
+                  - generic [ref=e117]: 9:16
+            - generic [ref=e118]:
+              - generic [ref=e119]:
+                - generic [ref=e120]:
+                  - img [ref=e122]
+                  - button [ref=e124]:
+                    - img [ref=e125]
+                - generic [ref=e128] [cursor=pointer]: 烬骨照山河
+                - generic [ref=e129] [cursor=pointer]: 三界失衡后的第七十年，仙门表面重掌秩序，实则以“镇魔”为名抽取凡人与妖族命火，维系天道大阵。传说中早已陨落的“烬骨剑主”留下了一截可照见因果的神骨，一旦重现世间，所有被掩埋的血债、背叛与天道骗局都将被揭穿。 禁改规则 男主必须始终保持“病骨美人但危险”的气质，不可写成阳光少年 女主必须是强行动派，不可降级成被动等待拯救的柔弱模板 仙门不是绝对正义阵营，核心魅力来自伪善秩序被撕开 感情线必须建立在共同赴死、相互试探、共同背叛真相之后，不能甜得廉价 每一集结尾必须有强钩子，适合漫剧分页和短视频切段传播
+              - generic [ref=e130] [cursor=pointer]:
+                - generic [ref=e131]:
+                  - generic [ref=e132]:
+                    - generic [ref=e133]:
+                      - img [ref=e134]
+                      - generic [ref=e139]: 1 集
+                      - generic [ref=e140]: 1 完成
+                    - generic [ref=e141]:
+                      - img [ref=e142]
+                      - generic [ref=e147]: 4 角色
+                  - generic [ref=e148]:
+                    - img [ref=e149]
+                    - generic [ref=e152]: 2026/5/14
+                - generic [ref=e153]:
+                  - generic [ref=e154]: 漫剧
+                  - generic [ref=e155]: 9:16
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e64] [cursor=pointer]:
+    - img [ref=e65]
+  - alert [ref=e156]

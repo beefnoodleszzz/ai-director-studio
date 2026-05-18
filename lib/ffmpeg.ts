@@ -15,12 +15,20 @@ export interface SceneAsset {
   localAudio?: string | null;
   localSfx?: string | null;
   localBgm?: string | null;
+  shotType?: string | null;
+  emotionGoal?: string | null;
 }
 
 export interface AssembleOptions {
   outputPath: string;
   bgmPath?: string;
   aspect?: "16:9" | "9:16";
+}
+
+export interface MediaProbeSummary {
+  durationSec: number;
+  width: number;
+  height: number;
 }
 
 /** 获取媒体时长（秒）*/
@@ -33,6 +41,20 @@ function getDuration(filePath: string): Promise<number> {
   });
 }
 
+export function probeMedia(filePath: string): Promise<MediaProbeSummary> {
+  return new Promise((resolve, reject) => {
+    ffmpeg.ffprobe(filePath, (err, meta) => {
+      if (err) return reject(err);
+      const videoStream = meta.streams?.find((stream) => stream.codec_type === "video");
+      resolve({
+        durationSec: meta.format.duration ?? 0,
+        width: videoStream?.width ?? 0,
+        height: videoStream?.height ?? 0,
+      });
+    });
+  });
+}
+
 const done = (resolve: () => void) => () => resolve();
 
 /** 将单张图片转为指定时长视频 */
@@ -40,12 +62,28 @@ function imageToVideo(
   imagePath: string,
   durationSec: number,
   outputPath: string,
-  size: string
+  size: string,
+  motionPreset: string
 ): Promise<void> {
   return new Promise((resolve, reject) => {
+    const [width, height] = size.split(":").map(Number);
+    const frames = Math.max(1, Math.round(durationSec * 25));
+    const zoompan =
+      motionPreset === "push-in"
+        ? `zoompan=z='min(zoom+0.0009,1.10)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=${width}x${height}`
+        : motionPreset === "pan-left"
+          ? `zoompan=z='1.04':x='if(lte(on,1),0,x+0.6)':y='ih/2-(ih/zoom/2)':d=${frames}:s=${width}x${height}`
+          : motionPreset === "pan-up"
+            ? `zoompan=z='1.04':x='iw/2-(iw/zoom/2)':y='if(lte(on,1),ih*0.08,y-0.5)':d=${frames}:s=${width}x${height}`
+            : `zoompan=z='min(zoom+0.0006,1.06)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=${width}x${height}`;
+
     ffmpeg(imagePath)
       .inputOptions(["-loop 1", "-framerate 25"])
-      .videoFilters([`scale=${size}:force_original_aspect_ratio=decrease`, `pad=${size}:(ow-iw)/2:(oh-ih)/2`])
+      .videoFilters([
+        `scale=${size}:force_original_aspect_ratio=increase`,
+        `crop=${size}`,
+        zoompan,
+      ])
       .outputOptions(["-c:v libx264", "-t", String(durationSec), "-pix_fmt yuv420p"])
       .save(outputPath)
       .on("end", done(resolve))
@@ -99,9 +137,15 @@ export async function assembleEpisode(
     } else if (scene.localImage && fs.existsSync(scene.localImage)) {
       const audioDur = scene.localAudio && fs.existsSync(scene.localAudio)
         ? await getDuration(scene.localAudio)
-        : 5;
+        : getDefaultDuration(scene.shotType, scene.emotionGoal);
       const imgVidPath = path.join(tmpDir, `img2vid_${i}.mp4`);
-      await imageToVideo(scene.localImage, audioDur, imgVidPath, size);
+      await imageToVideo(
+        scene.localImage,
+        audioDur,
+        imgVidPath,
+        size,
+        selectMotionPreset(scene.shotType, scene.emotionGoal)
+      );
       videoSrc = imgVidPath;
     } else {
       console.warn(`[ffmpeg] Scene ${i} 无视频/图片资产，跳过`);
@@ -142,6 +186,25 @@ export async function assembleEpisode(
   fs.rmSync(tmpDir, { recursive: true, force: true });
 
   return outputPath;
+}
+
+function getDefaultDuration(shotType?: string | null, emotionGoal?: string | null) {
+  const type = (shotType ?? "").toUpperCase();
+  const emotion = (emotionGoal ?? "").toLowerCase();
+  if (type === "ECU" || type === "CU") return 2.8;
+  if (type === "LS" || type === "ELS") return 4.5;
+  if (emotion.includes("reveal") || emotion.includes("awe")) return 4.8;
+  if (emotion.includes("tension") || emotion.includes("panic")) return 3.2;
+  return 3.8;
+}
+
+function selectMotionPreset(shotType?: string | null, emotionGoal?: string | null) {
+  const type = (shotType ?? "").toUpperCase();
+  const emotion = (emotionGoal ?? "").toLowerCase();
+  if (type === "ECU" || type === "CU") return "push-in";
+  if (type === "LS" || type === "ELS") return "pan-left";
+  if (emotion.includes("sad") || emotion.includes("memory")) return "pan-up";
+  return "gentle";
 }
 
 /** 为单个分镜混合 TTS + SFX */

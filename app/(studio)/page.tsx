@@ -33,6 +33,18 @@ import {
 import { Film, Plus, Clock, Clapperboard, Trash2, Loader2, Users } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
+import { EmptyState } from "@/components/studio/EmptyState";
+import { FormActionBar } from "@/components/studio/FormActionBar";
+
+const PROJECT_TYPE_LABELS: Record<string, string> = {
+  "short-drama": "短剧",
+  "manga-drama": "漫剧",
+};
+
+const ASPECT_LABELS: Record<string, string> = {
+  "9:16": "9:16（竖屏）",
+  "16:9": "16:9（横屏）",
+};
 
 function ProjectCard({ project, onDeleted }: { project: ProjectData; onDeleted: (id: string) => void }) {
   const router = useRouter();
@@ -100,18 +112,18 @@ function ProjectCard({ project, onDeleted }: { project: ProjectData; onDeleted: 
         <CardTitle className="text-base leading-snug mt-2 cursor-pointer" onClick={handleOpen}>
           {project.title}
         </CardTitle>
-        <CardDescription className="text-xs line-clamp-2 cursor-pointer" onClick={handleOpen}>
+        <CardDescription className="type-meta line-clamp-2 cursor-pointer" onClick={handleOpen}>
           {project.worldSetting || project.era || "暂无世界观描述"}
         </CardDescription>
       </CardHeader>
       <CardContent className="pt-0 cursor-pointer" onClick={handleOpen}>
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <div className="flex items-center justify-between type-meta text-muted-foreground">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1">
               <Clapperboard className="size-3" />
               <span>{totalEps} 集</span>
               {completedEps > 0 && (
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 ml-1">
+                <Badge variant="secondary" className="text-xs px-1.5 py-0 ml-1">
                   {completedEps} 完成
                 </Badge>
               )}
@@ -127,10 +139,10 @@ function ProjectCard({ project, onDeleted }: { project: ProjectData; onDeleted: 
           </div>
         </div>
         <div className="mt-2 flex gap-1">
-          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+          <Badge variant="outline" className="text-xs px-1.5 py-0">
             {project.type === "manga-drama" ? "漫剧" : "短剧"}
           </Badge>
-          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+          <Badge variant="outline" className="text-xs px-1.5 py-0">
             {project.aspect ?? "9:16"}
           </Badge>
         </div>
@@ -205,7 +217,7 @@ function CreateProjectSheet({ onCreated }: { onCreated: (project: ProjectData) =
               <Label>项目类型</Label>
               <Select value={type} onValueChange={(v) => v && setType(v)}>
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue>{PROJECT_TYPE_LABELS[type] ?? type}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="short-drama">短剧</SelectItem>
@@ -217,7 +229,7 @@ function CreateProjectSheet({ onCreated }: { onCreated: (project: ProjectData) =
               <Label>默认画幅</Label>
               <Select value={aspect} onValueChange={(v) => v && setAspect(v)}>
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue>{ASPECT_LABELS[aspect] ?? aspect}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="9:16">9:16（竖屏）</SelectItem>
@@ -247,16 +259,16 @@ function CreateProjectSheet({ onCreated }: { onCreated: (project: ProjectData) =
           </div>
         </div>
 
-        <SheetFooter className="px-6 pb-6 pt-4 border-t border-border/50">
-          <div className="flex gap-2 w-full">
+        <SheetFooter className="p-0">
+          <FormActionBar className="w-full justify-stretch">
             <Button variant="outline" className="flex-1" onClick={() => setOpen(false)}>
               取消
             </Button>
             <Button className="flex-1 gap-2" onClick={handleCreate} disabled={loading || !title.trim()}>
               {loading ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-              {loading ? "创建中..." : "创建项目"}
+              {loading ? "创建中…" : "创建项目"}
             </Button>
-          </div>
+          </FormActionBar>
         </SheetFooter>
       </SheetContent>
     </Sheet>
@@ -278,7 +290,7 @@ export default function HomePage() {
   };
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="app-page py-8">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">影视项目</h1>
@@ -288,18 +300,14 @@ export default function HomePage() {
       </div>
 
       {projects.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
-          <div className="size-16 rounded-2xl bg-muted/50 border border-border flex items-center justify-center">
-            <Film className="size-8 text-muted-foreground" />
-          </div>
-          <div>
-            <p className="font-medium">还没有项目</p>
-            <p className="text-sm text-muted-foreground mt-1">点击「新建项目」开始你的 AI 影视创作</p>
-          </div>
-          <CreateProjectSheet onCreated={handleCreated} />
-        </div>
+        <EmptyState
+          title="还没有项目"
+          description="点击「新建项目」开始你的 AI 影视创作。"
+          icon={Film}
+          action={<CreateProjectSheet onCreated={handleCreated} />}
+        />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {projects.map((project) => (
             <ProjectCard key={project.id} project={project} onDeleted={handleDeleted} />
           ))}

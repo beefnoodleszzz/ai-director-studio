@@ -164,6 +164,25 @@ function ensureDir(dir: string) {
   }
 }
 
+export function toAbsolutePublicPath(publicUrl: string | null | undefined) {
+  if (!publicUrl) return null;
+  const normalized = publicUrl.startsWith("/") ? publicUrl.slice(1) : publicUrl;
+  return path.join(process.cwd(), "public", normalized);
+}
+
+export function removeFileIfExists(targetPath: string | null | undefined) {
+  if (!targetPath) return false;
+  if (fs.existsSync(targetPath)) {
+    fs.rmSync(targetPath, { force: true });
+    return true;
+  }
+  return false;
+}
+
+export function removePublicUrlIfExists(publicUrl: string | null | undefined) {
+  return removeFileIfExists(toAbsolutePublicPath(publicUrl));
+}
+
 export function initProjectDirs(projectId: string) {
   ensureDir(paths.project(projectId));
   ensureDir(paths.cache(projectId));
@@ -258,6 +277,22 @@ export async function downloadCharacterAsset(
     writer.on("error", reject);
   });
 
+  return {
+    localPath: destPath,
+    url: urls.characterAsset(projectId, characterId, type, filename),
+  };
+}
+
+export function saveBase64ToCharacterAsset(
+  base64: string,
+  projectId: string,
+  characterId: string,
+  type: "refs" | "angles" | "expressions" | "wardrobe",
+  filename: string
+): { localPath: string; url: string } {
+  initCharacterDirs(projectId, characterId);
+  const destPath = paths.characterAsset(projectId, characterId, type, filename);
+  fs.writeFileSync(destPath, Buffer.from(base64, "base64"));
   return {
     localPath: destPath,
     url: urls.characterAsset(projectId, characterId, type, filename),

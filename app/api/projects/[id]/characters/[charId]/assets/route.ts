@@ -3,6 +3,11 @@ import path from "path";
 import fs from "fs";
 import { prisma } from "@/lib/prisma";
 import { generateId } from "@/lib/utils";
+import {
+  normalizeCharacterAssetRecord,
+  syncCharacterAssetStatus,
+} from "@/lib/workflows/character-assets";
+import { normalizeCharacterAssetType } from "@/lib/studio-contracts";
 
 export async function GET(
   _req: NextRequest,
@@ -14,7 +19,7 @@ export async function GET(
       where: { characterId: charId },
       orderBy: { createdAt: "asc" },
     });
-    return NextResponse.json(assets);
+    return NextResponse.json(assets.map(normalizeCharacterAssetRecord));
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
@@ -29,7 +34,7 @@ export async function POST(
 
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
-    const assetType = (formData.get("assetType") as string) || "reference";
+    const assetType = normalizeCharacterAssetType((formData.get("assetType") as string) || "reference-main");
     const label = (formData.get("label") as string) || "";
     const tags: string[] = [];
     const tagsRaw = formData.get("tags") as string | null;
@@ -66,7 +71,9 @@ export async function POST(
       },
     });
 
-    return NextResponse.json(asset, { status: 201 });
+    await syncCharacterAssetStatus(charId);
+
+    return NextResponse.json(normalizeCharacterAssetRecord(asset), { status: 201 });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }

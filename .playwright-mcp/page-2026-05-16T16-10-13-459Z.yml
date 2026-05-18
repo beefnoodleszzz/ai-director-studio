@@ -1,0 +1,233 @@
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e6]:
+      - link [ref=e83] [cursor=pointer]:
+        - /url: /
+        - img [ref=e10]
+        - generic [ref=e15]:
+          - paragraph [ref=e16]: AI Director
+          - paragraph [ref=e17]: Studio v0.1
+      - separator [ref=e18]
+      - generic [ref=e19]:
+        - list [ref=e21]:
+          - listitem [ref=e22]:
+            - link [ref=e84] [cursor=pointer]:
+              - /url: /
+              - img [ref=e24]
+              - generic [ref=e27]: 所有项目
+        - generic [ref=e28]:
+          - generic [ref=e29]: 最近项目
+          - list [ref=e31]:
+            - listitem [ref=e32]:
+              - link [ref=e85] [cursor=pointer]:
+                - /url: /projects/784ad742-6286-450e-832c-3aed30c50058
+                - img [ref=e34]
+                - generic [ref=e36]: 天荒烬雪图
+                - generic [ref=e37]: 1集
+            - listitem [ref=e38]:
+              - link [ref=e86] [cursor=pointer]:
+                - /url: /projects/272f523b-3877-4892-a0fa-dfaf33fb097b
+                - img [ref=e40]
+                - generic [ref=e42]: 烬骨照山河
+                - generic [ref=e43]: 1集
+      - generic [ref=e45]: AI Director Studio v0.1.0
+    - generic [ref=e46]:
+      - banner [ref=e47]:
+        - button [ref=e87]:
+          - img
+          - generic [ref=e49]: Toggle Sidebar
+        - separator [ref=e50]
+        - generic [ref=e51]:
+          - img [ref=e52]
+          - generic [ref=e54]: 选择项目
+        - button [ref=e88]:
+          - img
+          - generic [ref=e57]: 浅色
+      - main [ref=e58]:
+        - generic [ref=e59]:
+          - generic [ref=e60]:
+            - generic [ref=e61]:
+              - link [ref=e62] [cursor=pointer]:
+                - /url: /projects/784ad742-6286-450e-832c-3aed30c50058
+                - button [ref=e63]:
+                  - img
+              - generic [ref=e64]:
+                - heading [level=1] [ref=e89]: 角色资产库
+                - paragraph [ref=e66]: 3 个角色，统一维护角色圣经、声音配置与参考资产。
+            - button [expanded] [ref=e90]:
+              - img
+              - text: 新建角色
+          - generic [ref=e70]:
+            - generic [ref=e91]:
+              - generic [ref=e92]:
+                - generic [ref=e93]:
+                  - img [ref=e95]
+                  - button [ref=e99]:
+                    - img
+                - generic [ref=e100]: 闻劫
+                - generic [ref=e101]:
+                  - generic [ref=e102]: 男
+                  - generic [ref=e103]: young-adult
+                  - generic [ref=e104]: 烬海冰原中活下来的“天荒遗民”，真实来历与上古裂天神骨有关
+                  - generic [ref=e105]: 资产待补齐
+              - generic [ref=e106]:
+                - generic [ref=e108]:
+                  - generic [ref=e109]:
+                    - paragraph [ref=e110]: 角色资产工厂
+                    - paragraph [ref=e111]: 建议补齐缺失资产
+                  - button [ref=e112]:
+                    - img
+                    - text: 生成资产包
+                - generic [ref=e113]:
+                  - generic [ref=e114]: 古老
+                  - generic [ref=e115]: 危险
+                  - generic [ref=e116]: 克制
+                - generic [ref=e117]:
+                  - generic [ref=e118]: 2 个资产
+                  - generic [ref=e119]: 25% 完整
+                  - generic [ref=e120]: 声音已配置
+                - paragraph [ref=e121]: 缺少 6 类核心角色资产
+                - generic [ref=e122]:
+                  - generic [ref=e123]: 缺 angle-left
+                  - generic [ref=e124]: 缺 angle-right
+                  - generic [ref=e125]: 缺 expression-neutral
+                  - generic [ref=e126]: 缺 expression-angry
+                  - generic [ref=e127]: "+2"
+            - generic [ref=e128]:
+              - generic [ref=e129]:
+                - generic [ref=e130]:
+                  - img [ref=e132]
+                  - button [ref=e136]:
+                    - img
+                - generic [ref=e137]: 姬寒衣
+                - generic [ref=e138]:
+                  - generic [ref=e139]: 女
+                  - generic [ref=e140]: young-adult
+                  - generic [ref=e141]: 九阙天城最年轻的执天司神使，负责巡狩“失序之物”
+                  - generic [ref=e142]: 资产待补齐
+              - generic [ref=e143]:
+                - generic [ref=e145]:
+                  - generic [ref=e146]:
+                    - paragraph [ref=e147]: 角色资产工厂
+                    - paragraph [ref=e148]: 建议补齐缺失资产
+                  - button [ref=e149]:
+                    - img
+                    - text: 生成资产包
+                - generic [ref=e150]:
+                  - generic [ref=e151]: 神性
+                  - generic [ref=e152]: 冷静
+                  - generic [ref=e153]: 傲慢
+                - generic [ref=e154]:
+                  - generic [ref=e155]: 2 个资产
+                  - generic [ref=e156]: 25% 完整
+                  - generic [ref=e157]: 声音已配置
+                - paragraph [ref=e158]: 缺少 6 类核心角色资产
+                - generic [ref=e159]:
+                  - generic [ref=e160]: 缺 angle-left
+                  - generic [ref=e161]: 缺 angle-right
+                  - generic [ref=e162]: 缺 expression-neutral
+                  - generic [ref=e163]: 缺 expression-angry
+                  - generic [ref=e164]: "+2"
+            - generic [ref=e165]:
+              - generic [ref=e166]:
+                - generic [ref=e167]:
+                  - img [ref=e169]
+                  - button [ref=e173]:
+                    - img
+                - generic [ref=e174]: 司天阙主·玄度
+                - generic [ref=e175]:
+                  - generic [ref=e176]: 男
+                  - generic [ref=e177]: adult
+                  - generic [ref=e178]: 九阙天城至高执序者之一，掌管命火与天律，维持伪天道续命秩序
+                  - generic [ref=e179]: 资产待补齐
+              - generic [ref=e180]:
+                - generic [ref=e182]:
+                  - generic [ref=e183]:
+                    - paragraph [ref=e184]: 角色资产工厂
+                    - paragraph [ref=e185]: 建议补齐缺失资产
+                  - button [ref=e186]:
+                    - img
+                    - text: 生成资产包
+                - generic [ref=e187]:
+                  - generic [ref=e188]: 神谕
+                  - generic [ref=e189]: 威严
+                  - generic [ref=e190]: 完美
+                - generic [ref=e191]:
+                  - generic [ref=e192]: 2 个资产
+                  - generic [ref=e193]: 25% 完整
+                  - generic [ref=e194]: 声音已配置
+                - paragraph [ref=e195]: 缺少 6 类核心角色资产
+                - generic [ref=e196]:
+                  - generic [ref=e197]: 缺 angle-left
+                  - generic [ref=e198]: 缺 angle-right
+                  - generic [ref=e199]: 缺 expression-neutral
+                  - generic [ref=e200]: 缺 expression-angry
+                  - generic [ref=e201]: "+2"
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e78] [cursor=pointer]:
+    - img [ref=e79]
+  - alert [ref=e82]
+  - dialog "新建角色圣经" [ref=e205]:
+    - heading "新建角色圣经" [level=2] [ref=e207]
+    - generic [ref=e208]:
+      - generic [ref=e209]:
+        - generic [ref=e210]:
+          - img [ref=e211]
+          - heading "新建角色圣经" [level=2] [ref=e214]
+        - paragraph [ref=e215]: 填写身份、锚点、可变范围与声音配置，统一角色跨镜头表现。
+      - generic [ref=e216]:
+        - tablist [ref=e217]:
+          - tab "身份" [active] [selected] [ref=e218]:
+            - img
+            - text: 身份
+          - tab "外貌描述" [ref=e219]
+          - tab "不可变锚点" [ref=e220]:
+            - img
+            - text: 不可变锚点
+          - tab "可变范围" [ref=e221]:
+            - img
+            - text: 可变范围
+          - tab "声音" [ref=e222]:
+            - img
+            - text: 声音
+        - tabpanel "身份" [ref=e223]:
+          - generic [ref=e224]:
+            - generic [ref=e225]:
+              - generic [ref=e226]: 角色名称 *
+              - textbox "主角名字" [ref=e227]
+            - generic [ref=e228]:
+              - generic [ref=e229]: 别名 / 绰号
+              - textbox "用逗号分隔多个别名" [ref=e230]
+            - generic [ref=e231]:
+              - generic [ref=e232]: 性别
+              - combobox [ref=e233]:
+                - generic [ref=e234]: 选择性别
+                - img: ▼
+              - textbox [ref=e235]
+            - generic [ref=e236]:
+              - generic [ref=e237]: 年龄段
+              - combobox [ref=e238]:
+                - generic [ref=e239]: 选择年龄段
+                - img: ▼
+              - textbox [ref=e240]
+          - generic [ref=e241]:
+            - generic [ref=e242]: 身份 / 职业
+            - textbox "如：亿万总裁 / 平民女孩 / 复仇者" [ref=e243]
+          - separator [ref=e244]
+          - generic [ref=e245]:
+            - generic [ref=e246]: 气质关键词
+            - generic [ref=e247]:
+              - textbox "输入关键词，按 Enter 添加" [ref=e248]
+              - button [ref=e249]:
+                - img
+          - generic [ref=e250]:
+            - generic [ref=e251]: AI 基础 Prompt（英文，供生成使用）
+            - textbox "e.g. young Chinese woman, 25 years old, sharp eyes, elegant temperament..." [ref=e252]
+      - generic [ref=e253]:
+        - button "取消" [ref=e254]
+        - button "保存圣经" [ref=e255]:
+          - img
+          - text: 保存圣经
+    - button "Close" [ref=e256]:
+      - img
+      - generic [ref=e257]: Close

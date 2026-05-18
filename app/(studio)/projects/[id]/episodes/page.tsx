@@ -5,9 +5,10 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Plus, BookOpen, ArrowRight, Loader2 } from "lucide-react";
+import { Plus, BookOpen, ArrowRight, Loader2 } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
+import { ProjectPageShell } from "@/components/studio/ProjectPageShell";
 
 interface Episode {
   id: string;
@@ -52,24 +53,18 @@ export default function EpisodesPage({ params }: { params: Promise<{ id: string 
   };
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link href={`/projects/${projectId}`}>
-            <Button variant="ghost" size="icon" className="size-8">
-              <ArrowLeft className="size-4" />
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-xl font-bold">剧集管理</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">{episodes.length} 集</p>
-          </div>
-        </div>
+    <ProjectPageShell
+      title="剧集管理"
+      description={`${episodes.length} 集内容。创建剧集后即可录入剧本、拆解场次并进入镜头工作台。`}
+      backHref={`/projects/${projectId}`}
+      contentClassName="app-page-narrow"
+      actions={
         <Button size="sm" onClick={handleCreate} disabled={creating}>
           {creating ? <Loader2 className="size-3.5 animate-spin mr-1" /> : <Plus className="size-3.5 mr-1" />}
           新建集数
         </Button>
-      </div>
+      }
+    >
 
       {loading ? (
         <div className="flex justify-center py-16">
@@ -97,15 +92,15 @@ export default function EpisodesPage({ params }: { params: Promise<{ id: string 
             return (
               <Link key={ep.id} href={`/projects/${projectId}/episodes/${ep.id}`}>
                 <Card className="hover:border-primary/40 transition-colors cursor-pointer">
-                  <CardHeader className="py-4 px-5">
+                  <CardHeader className="px-5 py-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <div className="size-9 rounded-lg bg-muted flex items-center justify-center text-sm font-mono font-semibold">
+                        <div className="size-10 rounded-xl bg-muted/70 flex items-center justify-center text-sm font-mono font-semibold">
                           EP{ep.episodeNum}
                         </div>
                         <div>
-                          <p className="font-semibold">{ep.title || `第 ${ep.episodeNum} 集`}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
+                          <p className="type-body-strong">{ep.title || `第 ${ep.episodeNum} 集`}</p>
+                          <p className="type-meta text-muted-foreground mt-1">
                             {shots.length} 个镜头
                             {shots.length > 0 && ` · ${done}/${shots.length} 已生成`}
                             {ep.summary && ` · ${ep.summary.slice(0, 40)}…`}
@@ -129,6 +124,6 @@ export default function EpisodesPage({ params }: { params: Promise<{ id: string 
           })}
         </div>
       )}
-    </div>
+    </ProjectPageShell>
   );
 }

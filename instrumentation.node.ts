@@ -196,7 +196,7 @@ async function recoverOne(
           episodeId,
           sceneId,
           shotId,
-          adoptedTakeId: adoptedImage.id,
+          adoptedImageTakeId: adoptedImage.id,
           visualPrompt: shot.visualPrompt,
           provider: inputRef.provider || undefined,
         })

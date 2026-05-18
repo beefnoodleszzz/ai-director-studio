@@ -18,6 +18,7 @@ import { Separator } from "@/components/ui/separator";
 import { Save, Copy, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import axios from "axios";
+import { FormActionBar } from "@/components/studio/FormActionBar";
 
 export interface PromptTemplate {
   id: string;
@@ -130,7 +131,7 @@ export function PromptTemplateEditor({ projectId, template, onSaved, onCancel }:
   return (
     <div className="space-y-6">
       {/* 基本信息 */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-1.5">
           <Label>模板名称 *</Label>
           <Input
@@ -146,7 +147,9 @@ export function PromptTemplateEditor({ projectId, template, onSaved, onCancel }:
             onValueChange={(v) => v && setForm({ ...form, category: v })}
           >
             <SelectTrigger>
-              <SelectValue />
+              <SelectValue>
+                {CATEGORY_LABELS[form.category] ?? form.category}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {Object.entries(CATEGORY_LABELS).map(([v, l]) => (
@@ -161,7 +164,7 @@ export function PromptTemplateEditor({ projectId, template, onSaved, onCancel }:
 
       {/* 结构化 Prompt 字段 */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-muted/15 p-4 md:flex-row md:items-center md:justify-between">
           <p className="text-sm font-medium text-muted-foreground">结构化字段（组合后即为完整 Prompt）</p>
           <Button variant="ghost" size="sm" onClick={() => setPreviewMode(!previewMode)}>
             {previewMode ? <EyeOff className="size-4 mr-1.5" /> : <Eye className="size-4 mr-1.5" />}
@@ -181,7 +184,7 @@ export function PromptTemplateEditor({ projectId, template, onSaved, onCancel }:
                 </Button>
               </div>
               {form.negativePrompt && (
-                <p className="text-xs text-destructive/70 mt-2 font-mono">
+                <p className="type-caption mt-2 font-mono text-destructive/70">
                   Negative: {form.negativePrompt}
                 </p>
               )}
@@ -189,12 +192,12 @@ export function PromptTemplateEditor({ projectId, template, onSaved, onCancel }:
           </Card>
         )}
 
-        <div className="grid grid-cols-1 gap-4">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           {FIELDS.map(({ key, label, hint }) => (
             <div key={key} className="space-y-1.5">
               <div className="flex items-center gap-2">
                 <Label className="text-sm">{label}</Label>
-                <span className="text-xs text-muted-foreground">{hint}</span>
+                <span className="type-caption text-muted-foreground">{hint}</span>
               </div>
               <Textarea
                 value={(form[key as keyof typeof form] as string) ?? ""}
@@ -229,7 +232,7 @@ export function PromptTemplateEditor({ projectId, template, onSaved, onCancel }:
       )}
 
       {/* 操作按钮 */}
-      <div className="flex gap-2 justify-end">
+      <FormActionBar className="px-0 pb-0">
         {onCancel && (
           <Button variant="outline" onClick={onCancel}>
             取消
@@ -239,7 +242,7 @@ export function PromptTemplateEditor({ projectId, template, onSaved, onCancel }:
           <Save className="size-4 mr-1.5" />
           {saving ? "保存中…" : isNew ? "创建模板" : "保存更改"}
         </Button>
-      </div>
+      </FormActionBar>
     </div>
   );
 }

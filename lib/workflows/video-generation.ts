@@ -14,10 +14,16 @@ import axios from "axios";
 import ffmpeg from "fluent-ffmpeg";
 import { prisma } from "@/lib/prisma";
 import { downloadToTake, saveTakeInputJson, initTakeDirs, getLocalPath } from "@/lib/asset";
-import { enqueueTask } from "@/lib/task-queue";
+import { enqueueTask, markCurrentTaskBlocked } from "@/lib/task-queue";
 import { generateId, sleep } from "@/lib/utils";
 import { recommendProvider } from "@/lib/provider-recommender";
 import type { VideoGenInput, QAReviewResult } from "./types";
+import { buildBlockMeta } from "@/lib/studio-contracts";
+import { buildContinuityContext } from "@/lib/continuity";
+import { composeVideoPrompt } from "@/lib/prompt-composer";
+import { selectCharacterAssetsForShot } from "@/lib/character-asset-selector";
+import { findTag } from "@/lib/qa-tags";
+import { deriveRetryStrategyFromFailTags } from "@/lib/retry-strategy";
 
 // ─── Provider 抽象 ────────────────────────────────────────────────────────────
 
@@ -26,88 +32,85 @@ interface VideoProvider {
   generateI2V(imagePath: string, prompt: string): Promise<{ videoUrl: string; localHint?: string }>;
 }
 
-class KlingProvider implements VideoProvider {
-  name = "kling";
-  private apiKey = process.env.KLING_API_KEY ?? "";
-  private baseUrl = process.env.KLING_BASE_URL ?? "https://api.klingai.com/v1";
+class SeedanceProvider implements VideoProvider {
+  name = "seedance";
+  private apiKey = process.env.SEEDANCE_API_KEY ?? "";
+  private baseUrl = process.env.SEEDANCE_BASE_URL ?? "https://ark.cn-beijing.volces.com/api/v3";
 
   async generateI2V(imagePath: string, prompt: string) {
-    if (!this.apiKey) throw new Error("KLING_API_KEY is not configured");
+    if (!this.apiKey) throw new Error("SEEDANCE_API_KEY is not configured");
 
     const imageBuffer = fs.readFileSync(imagePath);
     const base64Image = imageBuffer.toString("base64");
+    const model = process.env.VIDEO_MODEL ?? "doubao-seedance-1-0-pro-250528";
 
-    const submitResp = await axios.post(
-      `${this.baseUrl}/videos/image2video`,
-      { model_name: "kling-v1", image: `data:image/jpeg;base64,${base64Image}`, prompt, duration: "5", aspect_ratio: "9:16" },
-      { headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" }, timeout: 30_000 }
+    const response = await axios.post(
+      `${this.baseUrl}/contents/generations/tasks`,
+      {
+        model,
+        content: [
+          {
+            type: "text",
+            text: prompt,
+          },
+          {
+            type: "image_url",
+            image_url: {
+              url: `data:image/jpeg;base64,${base64Image}`,
+            },
+          },
+        ],
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        timeout: 30_000,
+      }
     );
 
-    const taskId: string = submitResp.data?.data?.task_id ?? submitResp.data?.task_id;
-    if (!taskId) throw new Error("Kling: no task_id returned");
-
-    for (let i = 0; i < 60; i++) {
-      await sleep(5000);
-      const queryResp = await axios.get(`${this.baseUrl}/videos/image2video/${taskId}`, {
-        headers: { Authorization: `Bearer ${this.apiKey}` },
-        timeout: 15_000,
-      });
-      const data = queryResp.data?.data ?? queryResp.data;
-      const status = data?.task_status ?? data?.status;
-      const videoUrl: string | undefined = data?.task_result?.videos?.[0]?.url ?? data?.video_url;
-
-      if ((status === "succeed" || status === "completed") && videoUrl) return { videoUrl };
-      if (status === "failed") throw new Error("Kling task failed");
+    const taskId: string =
+      response.data?.id ??
+      response.data?.task_id ??
+      response.data?.data?.id;
+    if (!taskId) {
+      throw new Error(`Seedance: no task id returned: ${JSON.stringify(response.data)}`);
     }
-    throw new Error("Kling task timeout");
-  }
-}
-
-class HailuoProvider implements VideoProvider {
-  name = "hailuo";
-  private apiKey = process.env.HAILUO_API_KEY ?? "";
-  private baseUrl = process.env.HAILUO_BASE_URL ?? "https://api.minimaxi.chat/v1";
-
-  async generateI2V(imagePath: string, prompt: string) {
-    if (!this.apiKey) throw new Error("HAILUO_API_KEY is not configured");
-
-    const imageBuffer = fs.readFileSync(imagePath);
-    const base64Image = imageBuffer.toString("base64");
-
-    const submitResp = await axios.post(
-      `${this.baseUrl}/video_generation`,
-      { model: "video-01", prompt, first_frame_image: `data:image/jpeg;base64,${base64Image}` },
-      { headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" }, timeout: 30_000 }
-    );
-
-    const taskId: string = submitResp.data?.task_id ?? submitResp.data?.data?.task_id;
-    if (!taskId) throw new Error("Hailuo: no task_id returned");
 
     for (let i = 0; i < 60; i++) {
       await sleep(5000);
-      const queryResp = await axios.get(`${this.baseUrl}/query/video_generation?task_id=${taskId}`, {
+      const pollResp = await axios.get(`${this.baseUrl}/contents/generations/tasks/${taskId}`, {
         headers: { Authorization: `Bearer ${this.apiKey}` },
         timeout: 15_000,
       });
-      const status = queryResp.data?.status;
-      const fileId = queryResp.data?.file_id;
-      if (status === "Success" && fileId) {
-        const videoUrl = `${this.baseUrl}/files/${fileId}`;
+
+      const task = pollResp.data?.data ?? pollResp.data;
+      const status: string | undefined = task?.status;
+      const videoUrl: string | undefined =
+        task?.content?.video_url ??
+        task?.content?.video?.url ??
+        task?.result?.video_url ??
+        task?.video_url;
+
+      if ((status === "succeeded" || status === "completed" || status === "success") && videoUrl) {
         return { videoUrl };
       }
-      if (status === "Fail") throw new Error("Hailuo task failed");
+      if (status === "failed" || status === "error") {
+        throw new Error(`Seedance task failed: ${JSON.stringify(task)}`);
+      }
     }
-    throw new Error("Hailuo task timeout");
+
+    throw new Error("Seedance task timeout");
   }
 }
 
 const PROVIDERS: Record<string, VideoProvider> = {
-  kling: new KlingProvider(),
-  hailuo: new HailuoProvider(),
+  seedance: new SeedanceProvider(),
 };
 
 function getProvider(name?: string): VideoProvider {
-  const key = name ?? process.env.VIDEO_PROVIDER ?? "kling";
+  const key = name ?? process.env.VIDEO_PROVIDER ?? "seedance";
   const p = PROVIDERS[key];
   if (!p) throw new Error(`Unknown video provider: ${key}`);
   return p;
@@ -182,6 +185,60 @@ async function qaVideoMultiFrame(videoPath: string, tmpDir: string): Promise<QAR
   }
 }
 
+async function qaVideoContinuity(input: {
+  framesBase64: string[];
+  continuitySummary: string;
+  subjectSummary: string;
+  selectedAssetSummary: string;
+}): Promise<QAReviewResult> {
+  const qaKey = process.env.DEEPSEEK_API_KEY;
+  if (!qaKey || input.framesBase64.length === 0) {
+    return { verdict: "pass", score: 0.72, failTags: [], suggestion: "adopt", details: "Continuity QA skipped (no API key)" };
+  }
+
+  const qaBaseUrl = process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com/v1";
+  const qaModel = process.env.VISION_QA_MODEL ?? "deepseek-chat";
+
+  try {
+    const content = [
+      {
+        type: "text",
+        text: `请评估这组视频帧的强一致性，只从以下标签中返回 JSON：
+{"verdict":"pass|warn|fail","score":0.0-1.0,"failTags":["face-inconsistency|hairstyle-change|wardrobe-drift|temporal-inconsistency|continuity-break"],"details":["问题描述"]}
+角色摘要：${input.subjectSummary || "none"}
+上一镜头承接：${input.continuitySummary || "none"}
+当前已选角色资产：${input.selectedAssetSummary || "none"}
+重点判断：角色身份是否漂移、发型服装是否跳变、镜头承接是否突兀、帧间是否明显不连续。`,
+      },
+      ...input.framesBase64.map((b64) => ({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${b64}` } })),
+    ];
+
+    const response = await axios.post(
+      `${qaBaseUrl}/chat/completions`,
+      { model: qaModel, messages: [{ role: "user", content }], max_tokens: 180 },
+      { headers: { Authorization: `Bearer ${qaKey}`, "Content-Type": "application/json" }, timeout: 45_000 }
+    );
+
+    const raw = response.data?.choices?.[0]?.message?.content ?? "{}";
+    const result = JSON.parse(raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim());
+    const failTags = Array.isArray(result.failTags)
+      ? result.failTags
+          .filter((tag: string) => Boolean(findTag(tag)))
+          .map((tag: string) => ({ code: tag, label: findTag(tag)?.label ?? tag }))
+      : [];
+
+    return {
+      verdict: (result.verdict ?? "pass") as "pass" | "warn" | "fail",
+      score: result.score ?? 0.68,
+      failTags,
+      suggestion: ((result.verdict ?? "pass") === "fail" ? "must-redo" : "adopt") as QAReviewResult["suggestion"],
+      details: Array.isArray(result.details) ? result.details.join("; ") : String(result.details ?? ""),
+    };
+  } catch {
+    return { verdict: "pass", score: 0.68, failTags: [], suggestion: "adopt", details: "Continuity QA fallback" };
+  }
+}
+
 // ─── 主入口：为一个 Shot 生成视频候选 ──────────────────────────────────────────
 
 export interface GenerateVideoResult {
@@ -192,13 +249,65 @@ export interface GenerateVideoResult {
 }
 
 export async function generateShotVideo(input: VideoGenInput): Promise<GenerateVideoResult> {
-  const { projectId, episodeId, sceneId, shotId, adoptedTakeId, visualPrompt, provider } = input;
+  const {
+    projectId,
+    episodeId,
+    sceneId,
+    shotId,
+    adoptedImageTakeId,
+    adoptedTakeId,
+    visualPrompt,
+    provider,
+    stopOnQaFail = true,
+  } = input;
+  const resolvedAdoptedImageTakeId = adoptedImageTakeId ?? adoptedTakeId;
 
-  const adoptedTake = await prisma.take.findUnique({ where: { id: adoptedTakeId } });
-  if (!adoptedTake?.localImage) throw new Error(`Adopted take ${adoptedTakeId} has no image`);
+  if (!resolvedAdoptedImageTakeId) {
+    throw new Error("adoptedImageTakeId is required");
+  }
+
+  const adoptedTake = await prisma.take.findUnique({ where: { id: resolvedAdoptedImageTakeId } });
+  if (!adoptedTake?.localImage) throw new Error(`Adopted take ${resolvedAdoptedImageTakeId} has no image`);
 
   const imageAbsPath = getLocalPath(adoptedTake.localImage);
   if (!fs.existsSync(imageAbsPath)) throw new Error(`Image file not found: ${imageAbsPath}`);
+
+  const shot = await prisma.shot.findUnique({ where: { id: shotId } });
+  if (!shot) throw new Error(`Shot ${shotId} not found`);
+
+  await prisma.shot.update({
+    where: { id: shotId },
+    data: {
+      pipelineStage: "video_generating",
+      status: "generating",
+      blockReason: "",
+      blockMeta: "",
+    },
+  });
+
+  const subjectSummary = input.subjectSummary ?? await buildSubjectSummary(shot.subjectCharIds);
+  const continuity = await buildContinuityContext({
+    shotId,
+    sceneId,
+    shotOrder: shot.shotOrder,
+  });
+  const selectedAssets = await selectCharacterAssetsForShot({
+    subjectCharIdsRaw: shot.subjectCharIds,
+    cameraAngle: shot.cameraAngle,
+    emotionGoal: shot.emotionGoal,
+  });
+  const constrainedPrompt = composeVideoPrompt({
+    basePrompt: `${visualPrompt}${selectedAssets.summary ? `, selected role assets: ${selectedAssets.summary}` : ""}`,
+    subjectSummary,
+    referenceAssetUrls: Array.from(
+      new Set([
+        ...(input.referenceAssetUrls ?? []),
+        ...selectedAssets.referenceAssetUrls,
+        ...continuity.referenceAssetUrls,
+      ])
+    ),
+    continuitySummary: continuity.summary,
+  });
 
   // 自动推荐最优视频 provider
   let resolvedProvider = provider;
@@ -213,13 +322,48 @@ export async function generateShotVideo(input: VideoGenInput): Promise<GenerateV
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const takeId = generateId();
+    const previousVideoFailure =
+      attempt > 1
+        ? await prisma.review.findFirst({
+            where: {
+              take: { shotId, takeType: "video" },
+              reviewType: "video-qa",
+              verdict: { in: ["fail", "warn"] },
+            },
+            orderBy: { reviewedAt: "desc" },
+          })
+        : null;
+    const previousFailTags: string[] = previousVideoFailure?.failTags
+      ? (() => {
+          try {
+            const parsed = JSON.parse(previousVideoFailure.failTags) as Array<{ code?: string } | string>;
+            return parsed.map((item) => typeof item === "string" ? item : item.code ?? "").filter(Boolean);
+          } catch {
+            return [];
+          }
+        })()
+      : [];
+    const retryStrategy = deriveRetryStrategyFromFailTags(previousFailTags);
+    const retryPrompt = retryStrategy.promptHints.length > 0
+      ? `${constrainedPrompt}, retry guidance: ${retryStrategy.promptHints.join(", ")}`
+      : constrainedPrompt;
+    const continuityReferenceUrls = retryStrategy.disableContinuityReference ? [] : continuity.referenceAssetUrls;
     initTakeDirs(projectId, episodeId, sceneId, shotId, takeId);
 
-    const paramsSnapshot = { provider: videoProvider.name, prompt: visualPrompt, adoptedTakeId, attempt };
+    const paramsSnapshot = {
+      provider: videoProvider.name,
+      prompt: visualPrompt,
+      constrainedPrompt: retryPrompt,
+      adoptedImageTakeId: resolvedAdoptedImageTakeId,
+      subjectSummary,
+      continuitySummary: continuity.summary,
+      attempt,
+      retryStrategy,
+    };
     saveTakeInputJson(projectId, episodeId, sceneId, shotId, takeId, paramsSnapshot);
 
     try {
-      const genResult = await videoProvider.generateI2V(imageAbsPath, visualPrompt);
+      const genResult = await videoProvider.generateI2V(imageAbsPath, retryPrompt);
 
       const saved = await downloadToTake(
         genResult.videoUrl,
@@ -229,6 +373,40 @@ export async function generateShotVideo(input: VideoGenInput): Promise<GenerateV
 
       const tmpDir = path.dirname(saved.localPath);
       const qa = await qaVideoMultiFrame(saved.localPath, tmpDir);
+      const continuityFrames = await (async () => {
+        const frames: string[] = [];
+        try {
+          for (const [mark, label] of [["10%", "first"], ["50%", "mid"], ["90%", "last"]] as const) {
+            const framePath = path.join(tmpDir, `continuity_frame_${label}_${Date.now()}.jpg`);
+            await extractFrame(saved.localPath, mark, framePath);
+            const data = fs.readFileSync(framePath);
+            frames.push(data.toString("base64"));
+            fs.unlinkSync(framePath);
+          }
+        } catch {
+          return [] as string[];
+        }
+        return frames;
+      })();
+      const continuityQa = await qaVideoContinuity({
+        framesBase64: continuityFrames,
+        continuitySummary: continuity.summary,
+        subjectSummary,
+        selectedAssetSummary: selectedAssets.summary,
+      });
+      const mergedFailTags = Array.from(
+        new Map(
+          [...qa.failTags, ...continuityQa.failTags].map((tag) => [tag.code, tag])
+        ).values()
+      );
+      const mergedScore = Number(((qa.score * 0.6) + (continuityQa.score * 0.4)).toFixed(3));
+      const mergedVerdict =
+        qa.verdict === "fail" || continuityQa.verdict === "fail"
+          ? "fail"
+          : qa.verdict === "warn" || continuityQa.verdict === "warn"
+            ? "warn"
+            : "pass";
+      const mergedDetails = [qa.details, continuityQa.details].filter(Boolean).join(" | ");
 
       const take = await prisma.take.create({
         data: {
@@ -237,10 +415,18 @@ export async function generateShotVideo(input: VideoGenInput): Promise<GenerateV
           takeType: "video",
           provider: videoProvider.name,
           paramsSnapshot: JSON.stringify(paramsSnapshot),
-          promptSnapshot: visualPrompt,
-          refAssets: JSON.stringify([adoptedTake.localImage]),
+          promptSnapshot: retryPrompt,
+          refAssets: JSON.stringify(
+            Array.from(
+              new Set([
+                adoptedTake.localImage,
+                ...selectedAssets.referenceAssetUrls,
+                ...continuityReferenceUrls,
+              ].filter(Boolean))
+            )
+          ),
           localVideo: saved.url,
-          autoScore: qa.score,
+          autoScore: mergedScore,
           isAdopted: false,
         },
       });
@@ -249,20 +435,65 @@ export async function generateShotVideo(input: VideoGenInput): Promise<GenerateV
         data: {
           takeId: take.id,
           reviewType: "video-qa",
-          verdict: qa.verdict,
-          score: qa.score,
-          failTags: JSON.stringify(qa.failTags),
-          suggestion: qa.suggestion,
-          details: qa.details,
+          verdict: mergedVerdict,
+          score: mergedScore,
+          failTags: JSON.stringify(mergedFailTags),
+          suggestion: mergedVerdict === "fail" ? "must-redo" : "adopt",
+          details: mergedDetails,
         },
       });
 
-      if (qa.verdict !== "fail" || attempt === maxAttempts) {
-        await prisma.take.update({ where: { id: takeId }, data: { isAdopted: true } });
-        await prisma.shot.update({
-          where: { id: shotId },
-          data: { adoptedTakeId: takeId, status: "video_done" },
+      if (mergedVerdict !== "fail" || attempt === maxAttempts) {
+        await prisma.take.updateMany({
+          where: { shotId, takeType: "video", isAdopted: true },
+          data: { isAdopted: false },
         });
+        await prisma.take.update({ where: { id: takeId }, data: { isAdopted: true } });
+        if (mergedVerdict === "fail" && stopOnQaFail) {
+          const isContinuityFailure = mergedFailTags.some((tag) => tag.code === "continuity-break");
+          const blockMeta = {
+            code: isContinuityFailure ? "continuity-check-failed" as const : "video-qa-failed" as const,
+            message: isContinuityFailure
+              ? "Continuity QA failed and manual review is required."
+              : "Video QA failed and manual review is required.",
+            stage: "video" as const,
+            shotId,
+            takeId,
+            details: mergedFailTags.map((tag) => tag.label).filter(Boolean),
+          };
+
+          await prisma.shot.update({
+            where: { id: shotId },
+            data: {
+              adoptedVideoTakeId: takeId,
+              status: "blocked",
+              hasMotionVideo: true,
+              exportReadiness: "blocked",
+              fallbackMode: "none",
+              pipelineStage: "blocked_for_review",
+              blockReason: blockMeta.code,
+              blockMeta: buildBlockMeta(blockMeta),
+            },
+          });
+          await markCurrentTaskBlocked({
+            blockReason: blockMeta.code,
+            blockMeta,
+          });
+        } else {
+          await prisma.shot.update({
+            where: { id: shotId },
+            data: {
+              adoptedVideoTakeId: takeId,
+              status: "video_done",
+              hasMotionVideo: true,
+              exportReadiness: mergedVerdict === "fail" ? "warn" : "ready",
+              fallbackMode: "none",
+              pipelineStage: "video_ready",
+              blockReason: "",
+              blockMeta: "",
+            },
+          });
+        }
 
         return { takeId, localPath: saved.localPath, url: saved.url, qa };
       }
@@ -277,6 +508,32 @@ export async function generateShotVideo(input: VideoGenInput): Promise<GenerateV
   throw new Error(`Video generation failed after ${maxAttempts} attempts for shot ${shotId}`);
 }
 
+async function buildSubjectSummary(subjectCharIdsRaw: string | null | undefined) {
+  if (!subjectCharIdsRaw) return "";
+  let ids: string[] = [];
+  try {
+    ids = JSON.parse(subjectCharIdsRaw);
+  } catch {
+    return "";
+  }
+  if (!ids.length) return "";
+  const characters = await prisma.characterBible.findMany({
+    where: { id: { in: ids } },
+    select: {
+      name: true,
+      anchorFace: true,
+      anchorHair: true,
+      wardrobeBase: true,
+      temperamentTags: true,
+    },
+  });
+  return characters
+    .map((c) =>
+      `${c.name}: face=${c.anchorFace}; hair=${c.anchorHair}; wardrobe=${c.wardrobeBase}; aura=${c.temperamentTags}`
+    )
+    .join(" | ");
+}
+
 // ─── 含任务追踪的包装入口 ─────────────────────────────────────────────────────
 
 export async function generateShotVideoWithTask(input: VideoGenInput) {
@@ -285,7 +542,14 @@ export async function generateShotVideoWithTask(input: VideoGenInput) {
       projectId: input.projectId,
       shotId: input.shotId,
       taskType: "video",
-      inputRef: { shotId: input.shotId, adoptedTakeId: input.adoptedTakeId, provider: input.provider },
+      taskStage: "video",
+      parentTaskId: input.parentTaskId,
+      inputRef: {
+        shotId: input.shotId,
+        adoptedImageTakeId: input.adoptedImageTakeId ?? input.adoptedTakeId,
+        provider: input.provider,
+        stopOnQaFail: input.stopOnQaFail ?? true,
+      },
     },
     () => generateShotVideo(input)
   );

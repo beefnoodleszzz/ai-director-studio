@@ -72,6 +72,12 @@ export async function GET(
         for (const take of shot.takes) {
           const latestReview = take.reviews[0];
           if (!latestReview) continue;
+          let paramsSnapshot: Record<string, unknown> | null = null;
+          try {
+            paramsSnapshot = take.paramsSnapshot ? JSON.parse(take.paramsSnapshot) : null;
+          } catch {
+            paramsSnapshot = null;
+          }
           qaItems.push({
             // 路由上下文（供重做时构建 API 参数）
             projectId,
@@ -93,6 +99,7 @@ export async function GET(
               localVideo: take.localVideo,
               autoScore: take.autoScore,
               isAdopted: take.isAdopted,
+              paramsSnapshot,
             },
             review: {
               id: latestReview.id,

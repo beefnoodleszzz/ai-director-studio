@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,6 +24,7 @@ import {
 import axios from "axios";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { MediaPreview } from "@/components/studio/MediaPreview";
 
 export interface TakeForComparison {
   id: string;
@@ -106,15 +106,15 @@ export function TakeComparison({ shotId, takes, onAdoptChanged }: Props) {
   return (
     <div className="space-y-4">
       {/* 布局切换 */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-muted/15 px-4 py-3">
         <p className="text-sm font-medium">
           候选对比 · {displayTakes.length} 个版本
         </p>
-        <div className="flex gap-1">
+        <div className="flex gap-1 rounded-xl border border-border/60 bg-background/60 p-1">
           <Button
             variant={colLayout === 2 ? "secondary" : "ghost"}
             size="sm"
-            className="h-7 px-2 text-xs"
+            className="h-8 px-3 text-xs"
             onClick={() => setColLayout(2)}
           >
             2列
@@ -122,7 +122,7 @@ export function TakeComparison({ shotId, takes, onAdoptChanged }: Props) {
           <Button
             variant={colLayout === 3 ? "secondary" : "ghost"}
             size="sm"
-            className="h-7 px-2 text-xs"
+            className="h-8 px-3 text-xs"
             onClick={() => setColLayout(3)}
           >
             3列
@@ -136,7 +136,7 @@ export function TakeComparison({ shotId, takes, onAdoptChanged }: Props) {
         <div
           className={cn(
             "grid gap-3",
-            colLayout === 2 ? "grid-cols-2" : "grid-cols-3"
+            colLayout === 2 ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
           )}
         >
           {displayTakes.map((take, idx) => {
@@ -158,14 +158,13 @@ export function TakeComparison({ shotId, takes, onAdoptChanged }: Props) {
                 )}
               >
                 {/* 媒体预览 */}
-                <div className="relative aspect-video bg-muted group">
-                  {take.localImage ? (
-                    <Image
-                      src={take.localImage}
-                      alt={`Take ${idx + 1}`}
-                      fill
-                      className="object-cover"
-                      sizes="(max-width: 768px) 50vw, 33vw"
+                <div className="group relative aspect-video bg-muted">
+                  {take.localImage || take.localVideo ? (
+                    <MediaPreview
+                      type={take.localVideo ? "video" : "image"}
+                      src={take.localVideo ?? take.localImage}
+                      poster={take.localImage}
+                      className="absolute inset-0"
                     />
                   ) : (
                     <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-xs">
@@ -187,7 +186,7 @@ export function TakeComparison({ shotId, takes, onAdoptChanged }: Props) {
                   </Button>
                 </div>
 
-                <CardContent className="pt-2 pb-3 px-3 space-y-2">
+                <CardContent className="space-y-3 px-3 pb-3 pt-3">
                   {/* 评分和 verdict */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
@@ -204,6 +203,10 @@ export function TakeComparison({ shotId, takes, onAdoptChanged }: Props) {
                   </div>
 
                   <ScoreBar score={take.autoScore} />
+
+                  {review?.details ? (
+                    <p className="line-clamp-2 text-xs leading-5 text-muted-foreground">{review.details}</p>
+                  ) : null}
 
                   {/* 失败标签 */}
                   {failTags.length > 0 && (
@@ -261,24 +264,14 @@ export function TakeComparison({ shotId, takes, onAdoptChanged }: Props) {
               {lightboxTake && Math.round(lightboxTake.autoScore * 100)}分
             </DialogTitle>
           </DialogHeader>
-          {lightboxTake?.localImage && (
-            <div className="relative aspect-video w-full rounded-lg overflow-hidden">
-              <Image
-                src={lightboxTake.localImage}
-                alt="预览"
-                fill
-                className="object-contain"
-                sizes="80vw"
-              />
-            </div>
-          )}
-          {lightboxTake?.localVideo && (
-            <video
-              src={lightboxTake.localVideo}
-              controls
-              className="w-full rounded-lg"
+          {lightboxTake?.localImage || lightboxTake?.localVideo ? (
+            <MediaPreview
+              type={lightboxTake?.localVideo ? "video" : "image"}
+              src={lightboxTake?.localVideo ?? lightboxTake?.localImage}
+              poster={lightboxTake?.localImage}
+              className="aspect-video w-full"
             />
-          )}
+          ) : null}
 
           {/* Lightbox 导航 */}
           <div className="flex items-center justify-between">

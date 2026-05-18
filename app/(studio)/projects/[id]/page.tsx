@@ -6,7 +6,6 @@ import { useProjectStore } from "@/stores/projectStore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import {
   Film,
   Users,
@@ -26,6 +25,8 @@ import {
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
+import { ProjectPageShell } from "@/components/studio/ProjectPageShell";
+import { SectionHeading } from "@/components/studio/SectionHeading";
 
 interface ProjectDetail {
   id: string;
@@ -69,14 +70,14 @@ function NavCard({
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <p className="font-medium text-sm">{title}</p>
+              <p className="type-body-strong">{title}</p>
               {badge && (
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                <Badge variant="secondary" className="text-xs px-1.5 py-0">
                   {badge}
                 </Badge>
               )}
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+            <p className="type-meta text-muted-foreground mt-1">{description}</p>
           </div>
           <ArrowRight className="size-4 text-muted-foreground shrink-0 mt-0.5" />
         </CardContent>
@@ -133,7 +134,7 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
 
   if (!project) {
     return (
-      <div className="p-6 text-center text-muted-foreground">项目不存在或已被删除</div>
+      <div className="app-page py-10 text-center text-muted-foreground">项目不存在或已被删除</div>
     );
   }
 
@@ -145,30 +146,21 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
       .filter((sh) => sh.status === "video_done").length ?? 0;
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-8">
-      {/* ─── Header ─── */}
-      <div>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">{project.title}</h1>
-            <div className="flex items-center gap-2 mt-1.5">
-              <Badge variant="outline">{project.type === "manga-drama" ? "漫剧" : "短剧"}</Badge>
-              <Badge variant="outline">{project.aspect}</Badge>
-              {project.era && <Badge variant="outline">{project.era}</Badge>}
-              {project.styleBible?.genreTag && (
-                <Badge variant="secondary">{project.styleBible.genreTag}</Badge>
-              )}
-            </div>
-            {project.worldSetting && (
-              <p className="text-sm text-muted-foreground mt-2 line-clamp-2 max-w-2xl">
-                {project.worldSetting}
-              </p>
-            )}
-          </div>
-        </div>
+    <ProjectPageShell
+      title={project.title}
+      description={project.worldSetting || "围绕角色、风格、剧集和镜头工作台，管理整个 AI 影视制作项目。"}
+      backHref="/"
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="outline">{project.type === "manga-drama" ? "漫剧" : "短剧"}</Badge>
+        <Badge variant="outline">{project.aspect}</Badge>
+        {project.era && <Badge variant="outline">{project.era}</Badge>}
+        {project.styleBible?.genreTag && (
+          <Badge variant="secondary">{project.styleBible.genreTag}</Badge>
+        )}
+      </div>
 
-        {/* 统计 */}
-        <div className="flex items-center gap-6 mt-4 text-sm">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 type-body">
           <div className="flex items-center gap-1.5 text-muted-foreground">
             <Film className="size-4" />
             <span>{project.episodes?.length ?? 0} 集</span>
@@ -186,15 +178,21 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
               </span>
             )}
           </div>
-        </div>
       </div>
 
-      <Separator />
-
-      {/* ─── 导演工作台导航 ─── */}
       <section className="space-y-4">
-        <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">导演工作台</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <SectionHeading
+          eyebrow="工作区"
+          title="导演工作台"
+          description="按制作流程进入角色、风格、剧集、任务、审片和导出模块。"
+        />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <NavCard
+            href={`/projects/${id}/story`}
+            icon={FileText}
+            title="故事工作台"
+            description="AI 生成大纲、主角、角色、剧本正文，并确认后进入拆解"
+          />
           <NavCard
             href={`/projects/${id}/characters`}
             icon={Users}
@@ -237,12 +235,13 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
         </div>
       </section>
 
-      <Separator />
-
-      {/* ─── 质量飞轮工具 ─── */}
       <section className="space-y-4">
-        <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">质量飞轮</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <SectionHeading
+          eyebrow="优化"
+          title="质量飞轮"
+          description="通过模板、基准、角色一致性和统计面板持续提升整条生成链路的稳定性。"
+        />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <NavCard
             href={`/projects/${id}/templates`}
             icon={FileText}
@@ -270,17 +269,18 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
         </div>
       </section>
 
-      <Separator />
-
-      {/* ─── 剧集列表 ─── */}
       <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">剧集列表</h2>
-          <Button size="sm" variant="outline" onClick={handleCreateEpisode} disabled={creatingEp}>
-            {creatingEp ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
-            <span className="ml-1.5">新建集数</span>
-          </Button>
-        </div>
+        <SectionHeading
+          eyebrow="内容"
+          title="剧集列表"
+          description="从这里进入每一集的剧本拆解、场次编排与镜头生产。"
+          actions={
+            <Button size="sm" variant="outline" onClick={handleCreateEpisode} disabled={creatingEp}>
+              {creatingEp ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
+              <span className="ml-1.5">新建集数</span>
+            </Button>
+          }
+        />
 
         {project.episodes.length === 0 ? (
           <Card className="border-dashed">
@@ -288,7 +288,7 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
               <BookOpen className="size-8 text-muted-foreground" />
               <div>
                 <p className="font-medium text-sm">还没有集数</p>
-                <p className="text-xs text-muted-foreground mt-0.5">新建第一集，输入剧本开始创作</p>
+                <p className="type-meta text-muted-foreground mt-1">新建第一集，输入剧本开始创作</p>
               </div>
               <Button size="sm" onClick={handleCreateEpisode} disabled={creatingEp}>
                 <Plus className="size-3.5 mr-1" />
@@ -312,7 +312,7 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
                           </div>
                           <div>
                             <p className="font-medium text-sm">{ep.title || `第 ${ep.episodeNum} 集`}</p>
-                            <p className="text-xs text-muted-foreground">
+                            <p className="type-meta text-muted-foreground">
                               {shots.length} 个镜头
                               {shots.length > 0 && ` · ${done} 已生成`}
                             </p>
@@ -327,7 +327,7 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
                                   ? "secondary"
                                   : "outline"
                             }
-                            className="text-[10px]"
+                            className="text-xs"
                           >
                             {ep.status === "completed"
                               ? "已完成"
@@ -346,6 +346,6 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
           </div>
         )}
       </section>
-    </div>
+    </ProjectPageShell>
   );
 }

@@ -16,16 +16,25 @@ import {
   saveTakeInputJson,
   initTakeDirs,
 } from "@/lib/asset";
-import { enqueueTask } from "@/lib/task-queue";
+import { enqueueTask, getCurrentTaskId } from "@/lib/task-queue";
 import { generateId } from "@/lib/utils";
 import { recommendProvider } from "@/lib/provider-recommender";
 import type { ImageGenInput } from "./types";
+import { composeImagePrompt } from "@/lib/prompt-composer";
+import { generateShotVideoWithTask } from "./video-generation";
+import { selectCharacterAssetsForShot } from "@/lib/character-asset-selector";
+import { findTag } from "@/lib/qa-tags";
+import { deriveRetryStrategyFromFailTags } from "@/lib/retry-strategy";
 
 // ─── Provider 抽象 ────────────────────────────────────────────────────────────
 
 interface ImageProvider {
   name: string;
   generate(prompt: string, refImageUrls?: string[]): Promise<{ imageUrl: string; base64?: string }>;
+}
+
+function isVolcengineArkBaseUrl(baseUrl: string) {
+  return baseUrl.includes("volces.com") || baseUrl.includes("ark.cn-beijing");
 }
 
 class SeedreamProvider implements ImageProvider {
@@ -36,13 +45,45 @@ class SeedreamProvider implements ImageProvider {
     const baseUrl = process.env.SEEDREAM_BASE_URL ?? "https://api.seedream.io/v1";
     if (!apiKey) throw new Error("SEEDREAM_API_KEY is not configured");
 
+    const isArk = isVolcengineArkBaseUrl(baseUrl);
     const body: Record<string, unknown> = { prompt, aspect_ratio: "16:9" };
-    if (refImageUrls && refImageUrls.length > 0) body.image_url = refImageUrls[0];
 
-    const response = await axios.post(`${baseUrl}/images/generations`, body, {
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      timeout: 120_000,
-    });
+    // 火山方舟 /images/generations 要求 model；见文档「图片生成（Seedream 系列）」
+    if (isArk) {
+      const model = process.env.IMAGE_MODEL ?? process.env.SEEDREAM_MODEL;
+      if (!model) {
+        throw new Error(
+          "使用火山方舟地址时必须在环境变量中配置 IMAGE_MODEL（或 SEEDREAM_MODEL），例如 doubao-seedream-4.5"
+        );
+      }
+      body.model = model;
+      body.response_format = "url";
+      if (refImageUrls && refImageUrls.length > 0) {
+        body.image = refImageUrls.length === 1 ? refImageUrls[0] : refImageUrls;
+      }
+    } else if (refImageUrls && refImageUrls.length > 0) {
+      body.image_url = refImageUrls[0];
+    }
+
+    let response;
+    try {
+      response = await axios.post(`${baseUrl}/images/generations`, body, {
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        timeout: 120_000,
+      });
+    } catch (e) {
+      if (axios.isAxiosError(e) && e.response) {
+        const detail =
+          typeof e.response.data === "object"
+            ? JSON.stringify(e.response.data)
+            : String(e.response.data);
+        const code = e.response.headers["x-error-code"] ?? e.response.headers["x-request-id"];
+        throw new Error(
+          `Seedream HTTP ${e.response.status}${code ? ` (${String(code)})` : ""}: ${detail}`
+        );
+      }
+      throw e;
+    }
 
     const imageUrl: string =
       response.data?.data?.[0]?.url ??
@@ -114,6 +155,80 @@ async function qaImage(localPath: string): Promise<{ score: number; verdict: str
   }
 }
 
+async function qaImageConsistency(input: {
+  localPath: string;
+  characterNames: string[];
+  anchorFace: string[];
+  anchorHair: string[];
+  selectedAssetTypes: string[];
+  emotionGoal: string;
+  cameraAngle: string;
+}): Promise<{ score: number; verdict: "pass" | "warn" | "fail"; failTags: string[]; details: string }> {
+  const qaKey = process.env.DEEPSEEK_API_KEY;
+  const qaBaseUrl = process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com/v1";
+  const qaModel = process.env.VISION_QA_MODEL ?? "deepseek-chat";
+
+  if (!qaKey || !input.localPath) {
+    return { score: 0.75, verdict: "pass", failTags: [], details: "Consistency QA skipped (no API key)" };
+  }
+
+  try {
+    const fs = await import("fs");
+    const imageBuffer = fs.readFileSync(input.localPath);
+    const base64 = imageBuffer.toString("base64");
+    const selectedAssets = input.selectedAssetTypes.join(", ");
+
+    const response = await axios.post(
+      `${qaBaseUrl}/chat/completions`,
+      {
+        model: qaModel,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `请只从以下标签中评估这张角色图的一致性并输出 JSON：
+{"verdict":"pass|warn|fail","score":0.0-1.0,"failTags":["face-inconsistency|wardrobe-drift|hairstyle-change|wrong-expression|wrong-angle-reference"],"details":["问题描述"]}
+角色：${input.characterNames.join(", ") || "unknown"}
+脸部锚点：${input.anchorFace.join("; ") || "none"}
+发型锚点：${input.anchorHair.join("; ") || "none"}
+目标情绪：${input.emotionGoal || "none"}
+目标机位：${input.cameraAngle || "none"}
+已选角色资产：${selectedAssets || "none"}
+判断重点：角色脸是否稳定、发型是否正确、表情是否符合、角度是否基本符合。`,
+              },
+              { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64}` } },
+            ],
+          },
+        ],
+        max_tokens: 160,
+      },
+      {
+        headers: { Authorization: `Bearer ${qaKey}`, "Content-Type": "application/json" },
+        timeout: 30_000,
+      }
+    );
+
+    const content = response.data?.choices?.[0]?.message?.content ?? "{}";
+    const jsonStr = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    const result = JSON.parse(jsonStr);
+    const failTags = Array.isArray(result.failTags)
+      ? result.failTags.filter((tag: string) => Boolean(findTag(tag)))
+      : [];
+    const verdict = (result.verdict ?? "pass") as "pass" | "warn" | "fail";
+
+    return {
+      score: result.score ?? 0.65,
+      verdict,
+      failTags,
+      details: Array.isArray(result.details) ? result.details.join("; ") : String(result.details ?? ""),
+    };
+  } catch {
+    return { score: 0.65, verdict: "pass", failTags: [], details: "Consistency QA fallback" };
+  }
+}
+
 // ─── 主入口：为一个 Shot 生成图像候选 ──────────────────────────────────────────
 
 export interface GenerateImageResult {
@@ -126,7 +241,15 @@ export async function generateShotImages(input: ImageGenInput): Promise<Generate
   const shot = await prisma.shot.findUnique({ where: { id: shotId } });
   if (!shot) throw new Error(`Shot ${shotId} not found`);
 
-  await prisma.shot.update({ where: { id: shotId }, data: { status: "generating" } });
+  await prisma.shot.update({
+    where: { id: shotId },
+    data: {
+      status: "generating",
+      pipelineStage: "image_generating",
+      blockReason: "",
+      blockMeta: "",
+    },
+  });
 
   // 若未指定 provider，自动从历史统计推荐最优
   let resolvedProvider = input.provider;
@@ -138,17 +261,59 @@ export async function generateShotImages(input: ImageGenInput): Promise<Generate
 
   const imageProvider = getProvider(resolvedProvider);
   const results: GenerateImageResult["takes"] = [];
+  const characterConstraints = input.characterConstraints ?? await buildCharacterConstraints(
+    shot.subjectCharIds,
+    shot.cameraAngle,
+    shot.emotionGoal
+  );
+  const finalRefUrls = Array.from(new Set([...(refImageUrls ?? []), ...characterConstraints.refAssetUrls])).slice(0, 6);
+  const constrainedPrompt = composeImagePrompt(
+    `${prompt}${characterConstraints.selectionSummary ? `, selected role assets: ${characterConstraints.selectionSummary}` : ""}`,
+    characterConstraints
+  );
 
   for (let i = 0; i < candidateCount; i++) {
     const takeId = generateId();
+    const previousConsistencyFailures =
+      i > 0 && results.length > 0
+        ? await prisma.review.findFirst({
+            where: {
+              take: { shotId, takeType: "image" },
+              reviewType: "image-qa",
+              verdict: { in: ["fail", "warn"] },
+            },
+            orderBy: { reviewedAt: "desc" },
+          })
+        : null;
+    const previousFailTags: string[] = previousConsistencyFailures?.failTags
+      ? (() => {
+          try {
+            return JSON.parse(previousConsistencyFailures.failTags) as string[];
+          } catch {
+            return [];
+          }
+        })()
+      : [];
+    const retryStrategy = deriveRetryStrategyFromFailTags(previousFailTags);
+    const retryPrompt = retryStrategy.promptHints.length > 0
+      ? `${constrainedPrompt}, retry guidance: ${retryStrategy.promptHints.join(", ")}`
+      : constrainedPrompt;
 
     initTakeDirs(projectId, episodeId, sceneId, shotId, takeId);
 
-    const paramsSnapshot = { provider: imageProvider.name, prompt, refImageUrls, candidateIndex: i };
+    const paramsSnapshot = {
+      provider: imageProvider.name,
+      prompt,
+      constrainedPrompt: retryPrompt,
+      refImageUrls: finalRefUrls,
+      characterConstraints,
+      candidateIndex: i,
+      retryStrategy,
+    };
     saveTakeInputJson(projectId, episodeId, sceneId, shotId, takeId, paramsSnapshot);
 
     try {
-      const genResult = await imageProvider.generate(prompt, refImageUrls);
+      const genResult = await imageProvider.generate(retryPrompt, finalRefUrls);
 
       let localPath: string;
       let url: string;
@@ -164,6 +329,26 @@ export async function generateShotImages(input: ImageGenInput): Promise<Generate
       }
 
       const qa = await qaImage(localPath);
+      const consistencyQa = await qaImageConsistency({
+        localPath,
+        characterNames: characterConstraints.names,
+        anchorFace: characterConstraints.anchorFace,
+        anchorHair: characterConstraints.anchorHair,
+        selectedAssetTypes: characterConstraints.selectedAssetTypes ?? [],
+        emotionGoal: shot.emotionGoal,
+        cameraAngle: shot.cameraAngle,
+      });
+      const mergedFailTags = Array.from(new Set(consistencyQa.failTags));
+      const mergedScore = Number(((qa.score * 0.55) + (consistencyQa.score * 0.45)).toFixed(3));
+      const mergedVerdict =
+        qa.verdict === "fail" || consistencyQa.verdict === "fail"
+          ? "fail"
+          : qa.verdict === "warn" || consistencyQa.verdict === "warn"
+            ? "warn"
+            : "pass";
+      const mergedDetails = [qa.verdict !== "pass" ? `Image QA: ${qa.verdict}` : "", consistencyQa.details]
+        .filter(Boolean)
+        .join(" | ");
 
       const take = await prisma.take.create({
         data: {
@@ -172,10 +357,10 @@ export async function generateShotImages(input: ImageGenInput): Promise<Generate
           takeType: "image",
           provider: imageProvider.name,
           paramsSnapshot: JSON.stringify(paramsSnapshot),
-          promptSnapshot: prompt,
-          refAssets: JSON.stringify(refImageUrls ?? []),
+          promptSnapshot: retryPrompt,
+          refAssets: JSON.stringify(finalRefUrls),
           localImage: url,
-          autoScore: qa.score,
+          autoScore: mergedScore,
           isAdopted: false,
         },
       });
@@ -184,34 +369,139 @@ export async function generateShotImages(input: ImageGenInput): Promise<Generate
         data: {
           takeId: take.id,
           reviewType: "image-qa",
-          verdict: qa.verdict === "fail" ? "fail" : qa.verdict === "warn" ? "warn" : "pass",
-          score: qa.score,
-          failTags: "[]",
-          suggestion: qa.verdict === "fail" ? "must-redo" : "adopt",
-          details: `Auto QA score: ${qa.score}`,
+          verdict: mergedVerdict,
+          score: mergedScore,
+          failTags: JSON.stringify(mergedFailTags),
+          suggestion: mergedVerdict === "fail" ? "must-redo" : "adopt",
+          details: mergedDetails || `Auto QA score: ${mergedScore}`,
         },
       });
 
-      results.push({ takeId, localPath, url, score: qa.score });
+      results.push({ takeId, localPath, url, score: mergedScore });
     } catch (err) {
       console.error(`[image-gen] Take ${takeId} failed:`, err);
     }
   }
 
   if (results.length === 0) {
-    await prisma.shot.update({ where: { id: shotId }, data: { status: "error" } });
+    await prisma.shot.update({
+      where: { id: shotId },
+      data: { status: "error", pipelineStage: "draft" },
+    });
     throw new Error(`All ${candidateCount} image generation attempts failed for shot ${shotId}`);
   }
 
   // 自动选 score 最高的作为默认采用
   const best = results.reduce((a, b) => (a.score > b.score ? a : b));
+  await prisma.take.updateMany({
+    where: { shotId, takeType: "image", isAdopted: true },
+    data: { isAdopted: false },
+  });
   await prisma.take.update({ where: { id: best.takeId }, data: { isAdopted: true } });
-  await prisma.shot.update({
+  const updatedShot = await prisma.shot.update({
     where: { id: shotId },
-    data: { adoptedTakeId: best.takeId, status: "image_done", readiness: "done" },
+    data: {
+      adoptedImageTakeId: best.takeId,
+      adoptedVideoTakeId: null,
+      status: "image_done",
+      readiness: "done",
+      hasMotionVideo: false,
+      exportReadiness: "ready",
+      fallbackMode: "none",
+      pipelineStage: "image_ready",
+      blockReason: "",
+      blockMeta: "",
+    },
   });
 
+  if (updatedShot.autoContinue) {
+    await generateShotVideoWithTask({
+      projectId,
+      episodeId,
+      sceneId,
+      shotId,
+      adoptedImageTakeId: best.takeId,
+      visualPrompt: shot.visualPrompt || prompt,
+      autoContinue: true,
+      stopOnQaFail: true,
+      parentTaskId: getCurrentTaskId() ?? undefined,
+    });
+  }
+
   return { takes: results };
+}
+
+async function buildCharacterConstraints(
+  subjectCharIdsRaw: string | null | undefined,
+  cameraAngle = "",
+  emotionGoal = ""
+) {
+  const fallback = {
+    names: [] as string[],
+    anchorFace: [] as string[],
+    anchorHair: [] as string[],
+    wardrobeBase: [] as string[],
+    temperamentTags: [] as string[],
+    refAssetUrls: [] as string[],
+    selectedAssetTypes: [] as string[],
+    selectionSummary: "",
+  };
+  if (!subjectCharIdsRaw) return fallback;
+  let ids: string[] = [];
+  try {
+    ids = JSON.parse(subjectCharIdsRaw);
+  } catch {
+    return fallback;
+  }
+  if (!ids.length) return fallback;
+
+  const characters = await prisma.characterBible.findMany({
+    where: { id: { in: ids } },
+    include: {
+      assets: {
+        where: {
+          assetType: {
+            in: [
+              "reference-main",
+              "angle-left",
+              "angle-right",
+              "angle-three-quarter",
+              "expression-neutral",
+              "expression-angry",
+              "expression-sad",
+              "expression-surprised",
+              "reference",
+              "angle",
+              "expression",
+              "costume",
+            ],
+          },
+        },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  });
+
+  const selectedAssets = await selectCharacterAssetsForShot({
+    subjectCharIdsRaw,
+    cameraAngle,
+    emotionGoal,
+  });
+
+  return {
+    names: characters.map((c) => c.name),
+    anchorFace: characters.map((c) => c.anchorFace).filter(Boolean),
+    anchorHair: characters.map((c) => c.anchorHair).filter(Boolean),
+    wardrobeBase: characters.map((c) => c.wardrobeBase).filter(Boolean),
+    temperamentTags: characters.flatMap((c) =>
+      c.temperamentTags.split(",").map((t) => t.trim()).filter(Boolean)
+    ),
+    refAssetUrls: selectedAssets.referenceAssetUrls.length > 0
+      ? selectedAssets.referenceAssetUrls
+      : characters.flatMap((c) => c.assets.map((a) => a.localPath)).filter(Boolean),
+    selectedAssetTypes: selectedAssets.selectedTypes,
+    selectionSummary: selectedAssets.summary,
+  };
 }
 
 // ─── 含任务追踪的包装入口 ─────────────────────────────────────────────────────
@@ -222,6 +512,7 @@ export async function generateShotImagesWithTask(input: ImageGenInput) {
       projectId: input.projectId,
       shotId: input.shotId,
       taskType: "image",
+      taskStage: "image",
       inputRef: { shotId: input.shotId, provider: input.provider },
     },
     () => generateShotImages(input)

@@ -8,7 +8,9 @@
  */
 
 import PQueue from "p-queue";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { prisma } from "./prisma";
+import type { BlockMeta, TaskStage } from "./studio-contracts";
 
 export type TaskType =
   | "script-breakdown"
@@ -34,6 +36,7 @@ export interface CreateTaskInput {
   shotId?: string;
   parentTaskId?: string;
   taskType: TaskType;
+  taskStage?: TaskStage;
   priority?: number;
   maxAttempts?: number;
   inputRef?: Record<string, unknown>;
@@ -44,12 +47,19 @@ export interface TaskResult {
   status: TaskStatus;
   outputRef?: Record<string, unknown>;
   errorReason?: string;
+  blockReason?: string;
+  blockMeta?: BlockMeta | null;
+}
+
+interface TaskRuntimeContext {
+  taskId: string;
 }
 
 // ─── 内部并发队列（控制同时运行的任务数，不影响持久化） ────────────────────────
 
 const concurrency = Number(process.env.GENERATION_CONCURRENCY ?? 2);
 const pQueue = new PQueue({ concurrency });
+const taskRuntime = new AsyncLocalStorage<TaskRuntimeContext>();
 
 // ─── 创建任务 ─────────────────────────────────────────────────────────────────
 
@@ -60,6 +70,7 @@ export async function createTask(input: CreateTaskInput): Promise<string> {
       shotId: input.shotId,
       parentTaskId: input.parentTaskId,
       taskType: input.taskType,
+      taskStage: input.taskStage ?? "",
       priority: input.priority ?? 0,
       maxAttempts: input.maxAttempts ?? 3,
       inputRef: input.inputRef ? JSON.stringify(input.inputRef) : "",
@@ -93,7 +104,7 @@ export async function runTask<T>(
     });
 
     try {
-      const result = await fn();
+      const result = await taskRuntime.run({ taskId }, fn);
       await prisma.generationTask.update({
         where: { id: taskId },
         data: {
@@ -121,6 +132,33 @@ export async function runTask<T>(
       throw err;
     }
   }) as T;
+}
+
+export function getCurrentTaskId() {
+  return taskRuntime.getStore()?.taskId ?? null;
+}
+
+export async function markCurrentTaskBlocked(input: {
+  blockReason: string;
+  blockMeta: BlockMeta;
+}) {
+  const taskId = getCurrentTaskId();
+  if (!taskId) return;
+
+  await prisma.generationTask.update({
+    where: { id: taskId },
+    data: {
+      status: "paused",
+      blockReason: input.blockReason,
+      blockMeta: JSON.stringify(input.blockMeta),
+      completedAt: new Date(),
+    },
+  });
+
+  await appendTaskLog(
+    taskId,
+    `[BLOCKED] ${input.blockReason}: ${input.blockMeta.message}`
+  );
 }
 
 // ─── 便捷：创建 + 运行 ─────────────────────────────────────────────────────────
@@ -181,11 +219,21 @@ export async function resumeTask(taskId: string) {
 export async function getTaskStatus(taskId: string): Promise<TaskResult | null> {
   const task = await prisma.generationTask.findUnique({ where: { id: taskId } });
   if (!task) return null;
+  let blockMeta: BlockMeta | null = null;
+  if (task.blockMeta) {
+    try {
+      blockMeta = JSON.parse(task.blockMeta) as BlockMeta;
+    } catch {
+      blockMeta = null;
+    }
+  }
   return {
     taskId: task.id,
     status: task.status as TaskStatus,
     outputRef: task.outputRef ? JSON.parse(task.outputRef) : undefined,
     errorReason: task.errorReason || undefined,
+    blockReason: task.blockReason || undefined,
+    blockMeta,
   };
 }
 

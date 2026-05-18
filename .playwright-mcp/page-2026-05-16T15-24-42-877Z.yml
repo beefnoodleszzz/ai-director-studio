@@ -1,0 +1,58 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e6]:
+      - link "AI Director Studio v0.1" [ref=e8] [cursor=pointer]:
+        - /url: /
+        - img [ref=e10]
+        - generic [ref=e15]:
+          - paragraph [ref=e16]: AI Director
+          - paragraph [ref=e17]: Studio v0.1
+      - separator [ref=e18]
+      - generic [ref=e19]:
+        - list [ref=e21]:
+          - listitem [ref=e22]:
+            - link "所有项目" [ref=e23] [cursor=pointer]:
+              - /url: /
+              - img [ref=e24]
+              - generic [ref=e27]: 所有项目
+        - generic [ref=e28]:
+          - generic [ref=e29]: 最近项目
+          - list [ref=e31]:
+            - paragraph [ref=e32]: 暂无项目
+      - generic [ref=e34]: AI Director Studio v0.1.0
+    - generic [ref=e35]:
+      - banner [ref=e36]:
+        - button "Toggle Sidebar" [ref=e37]:
+          - img
+          - generic [ref=e38]: Toggle Sidebar
+        - separator [ref=e39]
+        - generic [ref=e40]:
+          - img [ref=e41]
+          - generic [ref=e43]: 选择项目
+      - main [ref=e44]:
+        - generic [ref=e45]:
+          - generic [ref=e47]:
+            - link [ref=e48] [cursor=pointer]:
+              - /url: /projects/784ad742-6286-450e-832c-3aed30c50058
+              - button [ref=e49]:
+                - img
+            - generic [ref=e50]:
+              - heading "Provider 基准" [level=1] [ref=e51]
+              - paragraph [ref=e52]: 对比不同 Provider 在真实项目里的通过率、均分、耗时与重试成本。
+          - generic [ref=e54]:
+            - generic [ref=e55]:
+              - generic [ref=e56]:
+                - img [ref=e57]
+                - generic [ref=e58]:
+                  - paragraph [ref=e59]: Provider 效果基准
+                  - paragraph [ref=e60]: 共统计 0 个 Take · 数据来自实际生成记录
+              - button "刷新" [ref=e61]:
+                - img
+                - text: 刷新
+            - generic [ref=e63]:
+              - img [ref=e64]
+              - paragraph [ref=e65]: 暂无统计数据
+              - paragraph [ref=e66]: 生成一些 Take 后数据会自动积累
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e72] [cursor=pointer]:
+    - img [ref=e73]

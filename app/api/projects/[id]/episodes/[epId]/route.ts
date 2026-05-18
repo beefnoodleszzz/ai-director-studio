@@ -48,6 +48,9 @@ export async function PATCH(
       hook: string;
       cliffhanger: string;
       prevLink: string;
+      scriptDraft: string;
+      scriptSource: string;
+      productionStage: string;
       status: string;
     }>;
     const episode = await prisma.episode.update({ where: { id: epId }, data: body });

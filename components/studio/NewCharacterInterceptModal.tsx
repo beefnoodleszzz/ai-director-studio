@@ -26,6 +26,7 @@ import {
   User,
 } from "lucide-react";
 import type { NewCharacterDraft } from "@/types";
+import { FormActionBar } from "@/components/studio/FormActionBar";
 
 interface CharacterSetupState {
   draft: NewCharacterDraft;
@@ -262,7 +263,7 @@ export function NewCharacterInterceptModal({
         </ScrollArea>
 
         {/* 底部操作栏 */}
-        <div className="px-6 pb-6 pt-4 border-t border-border/50 flex gap-2">
+        <FormActionBar className="justify-start gap-2">
           <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={onCancel}>
             跳过（不建立资产）
           </Button>
@@ -280,7 +281,7 @@ export function NewCharacterInterceptModal({
             )}
             {savingAll ? "保存中..." : allSaved ? "恢复分镜生成" : "全部完成，恢复流程"}
           </Button>
-        </div>
+        </FormActionBar>
       </DialogContent>
     </Dialog>
   );

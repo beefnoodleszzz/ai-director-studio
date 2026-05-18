@@ -11,7 +11,7 @@
 import axios from "axios";
 import { prisma } from "@/lib/prisma";
 import { enqueueTask } from "@/lib/task-queue";
-import type { ScriptBreakdownResult } from "./types";
+import type { ScriptBreakdownResult, StoryOutlineResult } from "./types";
 
 // ─── LLM 调用 ─────────────────────────────────────────────────────────────────
 
@@ -80,7 +80,40 @@ function buildSystemPrompt(existingCharNames: string): string {
 
 提取新角色规则：
 - 有名字、有台词、对剧情有推进作用 → 放入 newCharacters
-- 路人甲、保安、服务员、群众 → 不提取，在 visualPrompt 中泛化描述`;
+- 路人甲、保安、服务员、群众 → 不提取，在 visualPrompt 中泛化描述
+
+拆解要求强化：
+- 必须优先保持已确认主角为剧情视角核心，除非剧本文本明确要求切换。
+- 每个 scene 的 plotPurpose 和 emotionArc 必须服务于本集 beat，而不是泛泛总结。
+- 每个 shot 的 actionDesc / narrativePurpose / emotionGoal 必须具体到可拍可演可拆，不要抽象句。
+- visualPrompt 必须体现角色关系、冲突压力和本镜头叙事目标。
+- dialogue 必须保留人物辨识度，不要把所有角色说成同一种口气。`;
+}
+
+function summarizeRelationshipPressure(
+  characters: Array<{
+    name: string;
+    conflictRole: string;
+    relationshipSummary?: string;
+    arcSummary?: string;
+  }>
+) {
+  const hotZones = characters
+    .filter((character) =>
+      /(敌|对抗|压迫|背叛|控制|仇|阻碍|追杀)/.test(`${character.conflictRole}${character.relationshipSummary ?? ""}`)
+    )
+    .map((character) => `${character.name}: ${character.relationshipSummary || character.conflictRole}`)
+    .slice(0, 4);
+
+  const blindSpots = characters
+    .filter((character) => !character.relationshipSummary?.trim() || !character.arcSummary?.trim())
+    .map((character) => character.name)
+    .slice(0, 4);
+
+  return {
+    hotZones,
+    blindSpots,
+  };
 }
 
 // ─── 主入口 ───────────────────────────────────────────────────────────────────
@@ -108,13 +141,44 @@ export async function breakdownScript(input: BreakdownScriptInput): Promise<Brea
   });
   if (!episode) throw new Error(`Episode ${episodeId} not found`);
 
+  const outline = episode.project.storyOutline
+    ? (JSON.parse(episode.project.storyOutline) as StoryOutlineResult)
+    : null;
+  const lead = episode.project.characters.find((character) => character.isLead) ?? null;
+
   const existingCharNames = episode.project.characters.map((c) => c.name).join("、");
   const characterList = episode.project.characters
-    .map((c) => `- ${c.name}: ${c.basePrompt}`)
+    .map(
+      (c) =>
+        `- ${c.name}: role=${c.role}; isLead=${c.isLead ? "yes" : "no"}; goal=${c.dramaticGoal}; conflictRole=${c.conflictRole}; relationship=${c.relationshipSummary}; arc=${c.arcSummary}; visual=${c.basePrompt}`
+    )
     .join("\n");
+  const relationshipInsights = summarizeRelationshipPressure(episode.project.characters);
+
+  const beat = outline?.episodeBeats?.find((item) => item.episodeNum === episode.episodeNum) ?? null;
+  const outlineSummary = outline
+    ? [
+        `logline=${outline.logline}`,
+        `coreConflict=${outline.coreConflict}`,
+        `leadGoal=${outline.leadGoal}`,
+        `toneAndSell=${outline.toneAndSell ?? ""}`,
+        `villainPressure=${outline.villainPressure ?? ""}`,
+        `suspenseBeats=${(outline.suspenseBeats ?? []).join(" / ")}`,
+      ].join("\n")
+    : "（暂无确认大纲）";
 
   const systemPrompt = buildSystemPrompt(existingCharNames);
-  const userPrompt = `世界观：${episode.project.worldSetting}\n\n已有角色：\n${characterList}\n\n剧本：\n${script}`;
+  const userPrompt = [
+    `世界观：${episode.project.worldSetting}`,
+    `项目大纲约束：\n${outlineSummary}`,
+    `主角：${lead ? `${lead.name} / ${lead.role} / goal=${lead.dramaticGoal} / relation=${lead.relationshipSummary}` : "（尚未锁定）"}`,
+    `本集节拍：${beat ? `${beat.title} | beat=${beat.beat || beat.logline} | hook=${beat.hook} | cliffhanger=${beat.cliffhanger} | sceneGoal=${beat.sceneGoal ?? ""}` : "（暂无本集节拍）"}`,
+    `关系冲突热区：${relationshipInsights.hotZones.join(" / ") || "未明确，拆解时必须主动维持主角的关系压力"}`,
+    `关系盲区：${relationshipInsights.blindSpots.join(" / ") || "无明显盲区"}`,
+    `已有角色：\n${characterList}`,
+    `剧本来源：${episode.scriptSource || "manual"}`,
+    `剧本正文：\n${script}`,
+  ].join("\n\n");
 
   const raw = await callLLM(systemPrompt, userPrompt);
   const jsonStr = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
@@ -126,7 +190,12 @@ export async function breakdownScript(input: BreakdownScriptInput): Promise<Brea
   if (parsed.newCharacters.length > 0) {
     await prisma.episode.update({
       where: { id: episodeId },
-      data: { summary: parsed.episodeSummary, hook: parsed.hook, cliffhanger: parsed.cliffhanger },
+      data: {
+        summary: parsed.episodeSummary,
+        hook: parsed.hook,
+        cliffhanger: parsed.cliffhanger,
+        productionStage: "cast_locked",
+      },
     });
     return { status: "NEED_CHARACTER_SETUP", newCharacters: parsed.newCharacters, pendingData: parsed };
   }
@@ -158,6 +227,7 @@ async function commitScenesAndShots(episodeId: string, data: ScriptBreakdownResu
       summary: data.episodeSummary,
       hook: data.hook,
       cliffhanger: data.cliffhanger,
+      productionStage: "breakdown_ready",
       status: "in-progress",
     },
   });

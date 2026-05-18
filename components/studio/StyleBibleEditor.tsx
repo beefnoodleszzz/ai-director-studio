@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Card, CardContent } from "@/components/ui/card";
 import { Palette, Camera, AlertTriangle, Save, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { FormActionBar } from "@/components/studio/FormActionBar";
 
 export interface StyleBibleData {
   id?: string;
@@ -112,15 +113,12 @@ export function StyleBibleEditor({ initialData, projectId, onSave }: Props) {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="rounded-2xl border border-border/60 bg-muted/15 p-4">
         <div className="flex items-center gap-2">
           <Palette className="h-5 w-5 text-primary" />
           <h2 className="text-xl font-semibold">风格圣经</h2>
         </div>
-        <Button onClick={handleSave} disabled={saving}>
-          <Save className="mr-2 h-4 w-4" />
-          {saving ? "保存中…" : "保存"}
-        </Button>
+        <p className="type-meta mt-2 text-muted-foreground">统一题材、视觉、布景和负面词规则，保证生成链路输出风格稳定。</p>
       </div>
 
       {/* ─── 基础定性 ─── */}
@@ -130,34 +128,36 @@ export function StyleBibleEditor({ initialData, projectId, onSave }: Props) {
           基础定性
         </h3>
 
-        <div className="space-y-1.5">
-          <Label>题材标签</Label>
-          <Input
-            value={data.genreTag}
-            onChange={(e) => update("genreTag", e.target.value)}
-            placeholder="如：霸总甜宠 / 复仇爽剧 / 悬疑惊悚"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label>视觉流派</Label>
-          <div className="flex flex-wrap gap-2 mb-2">
-            {VISUAL_STYLES.map((style) => (
-              <Badge
-                key={style}
-                variant={data.visualStyle === style ? "default" : "outline"}
-                className="cursor-pointer"
-                onClick={() => update("visualStyle", data.visualStyle === style ? "" : style)}
-              >
-                {style}
-              </Badge>
-            ))}
+        <div className="grid gap-4 xl:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label>题材标签</Label>
+            <Input
+              value={data.genreTag}
+              onChange={(e) => update("genreTag", e.target.value)}
+              placeholder="如：霸总甜宠 / 复仇爽剧 / 悬疑惊悚"
+            />
           </div>
-          <Input
-            value={data.visualStyle}
-            onChange={(e) => update("visualStyle", e.target.value)}
-            placeholder="或自定义填写"
-          />
+
+          <div className="space-y-2">
+            <Label>视觉流派</Label>
+            <div className="mb-2 flex flex-wrap gap-2">
+              {VISUAL_STYLES.map((style) => (
+                <Badge
+                  key={style}
+                  variant={data.visualStyle === style ? "default" : "outline"}
+                  className="cursor-pointer"
+                  onClick={() => update("visualStyle", data.visualStyle === style ? "" : style)}
+                >
+                  {style}
+                </Badge>
+              ))}
+            </div>
+            <Input
+              value={data.visualStyle}
+              onChange={(e) => update("visualStyle", e.target.value)}
+              placeholder="或自定义填写"
+            />
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -186,7 +186,8 @@ export function StyleBibleEditor({ initialData, projectId, onSave }: Props) {
           视觉规则
         </h3>
 
-        {[
+        <div className="grid gap-4 xl:grid-cols-2">
+          {[
           {
             key: "colorStrategy",
             label: "色彩策略",
@@ -222,7 +223,8 @@ export function StyleBibleEditor({ initialData, projectId, onSave }: Props) {
               rows={2}
             />
           </div>
-        ))}
+          ))}
+        </div>
       </section>
 
       <Separator />
@@ -283,6 +285,13 @@ export function StyleBibleEditor({ initialData, projectId, onSave }: Props) {
           rows={3}
         />
       </section>
+
+      <FormActionBar className="px-0 pb-0">
+        <Button onClick={handleSave} disabled={saving}>
+          <Save className="mr-2 h-4 w-4" />
+          {saving ? "保存中…" : "保存"}
+        </Button>
+      </FormActionBar>
     </div>
   );
 }

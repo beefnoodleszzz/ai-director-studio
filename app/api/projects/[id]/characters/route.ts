@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { initCharacterDirs } from "@/lib/asset";
+import {
+  buildCharacterAssetStatusSnapshot,
+  normalizeCharacterAssetRecord,
+} from "@/lib/workflows/character-assets";
 
 export async function GET(
   _req: NextRequest,
@@ -13,7 +17,18 @@ export async function GET(
       include: { voiceProfile: true, assets: true },
       orderBy: { createdAt: "asc" },
     });
-    return NextResponse.json(characters);
+    return NextResponse.json(
+      characters.map((character) => {
+        const assets = character.assets.map(normalizeCharacterAssetRecord);
+        const snapshot = buildCharacterAssetStatusSnapshot(assets);
+        return {
+          ...character,
+          assetStatus: snapshot.assetStatus,
+          assetSnapshot: snapshot,
+          assets,
+        };
+      })
+    );
   } catch (err) {
     console.error("[GET /api/projects/:id/characters]", err);
     return NextResponse.json({ error: "Failed" }, { status: 500 });
@@ -51,6 +66,11 @@ export async function POST(
       // 关系与 AI prompt
       relationships?: string;
       basePrompt?: string;
+      isLead?: boolean;
+      dramaticGoal?: string;
+      conflictRole?: string;
+      relationshipSummary?: string;
+      arcSummary?: string;
       // 声音档案（可选同时创建）
       voiceProfile?: {
         voiceType?: string;
@@ -88,13 +108,18 @@ export async function POST(
         sceneOutfits: body.sceneOutfits ?? "",
         relationships: body.relationships ?? "",
         basePrompt: body.basePrompt ?? "",
+        isLead: body.isLead ?? false,
+        dramaticGoal: body.dramaticGoal ?? "",
+        conflictRole: body.conflictRole ?? "",
+        relationshipSummary: body.relationshipSummary ?? "",
+        arcSummary: body.arcSummary ?? "",
         ...(body.voiceProfile
           ? {
               voiceProfile: {
                 create: {
                   voiceType: body.voiceProfile.voiceType ?? "",
                   speechRate: body.voiceProfile.speechRate ?? "normal",
-                  provider: body.voiceProfile.provider ?? "minimax",
+                  provider: body.voiceProfile.provider ?? "doubao-tts",
                   voiceId: body.voiceProfile.voiceId ?? "",
                   emotionStyle: body.voiceProfile.emotionStyle ?? "",
                 },

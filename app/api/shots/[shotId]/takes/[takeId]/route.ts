@@ -7,7 +7,7 @@
  *
  * 当废弃当前采用的 take 时，同时清空：
  *   - take.isAdopted
- *   - shot.adoptedTakeId
+ *   - 对应的 shot 采用字段
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -30,15 +30,25 @@ export async function PATCH(
 
     const isDiscarding = body.isDiscarded === true && !take.isDiscarded;
 
-    // 若废弃的是当前 adopted take，清除 take.isAdopted 并清空 shot.adoptedTakeId
+    // 若废弃的是当前 adopted take，清除 take.isAdopted 并清空对应采用字段
     if (isDiscarding && take.isAdopted) {
       await prisma.take.updateMany({
-        where: { shotId, isAdopted: true },
+        where: { shotId, takeType: take.takeType, isAdopted: true },
         data: { isAdopted: false },
       });
+
+      const clearPatch =
+        take.takeType === "image"
+          ? { adoptedImageTakeId: null, pipelineStage: "draft" }
+          : take.takeType === "video"
+            ? { adoptedVideoTakeId: null, hasMotionVideo: false, pipelineStage: "image_ready" }
+            : take.takeType === "audio"
+              ? { adoptedAudioTakeId: null, pipelineStage: "video_ready" }
+              : {};
+
       await prisma.shot.update({
         where: { id: shotId },
-        data: { adoptedTakeId: null },
+        data: clearPatch,
       });
     }
 

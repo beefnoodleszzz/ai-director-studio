@@ -96,12 +96,12 @@ export function ConsistencyReport({ projectId }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-muted/15 p-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-2">
           <Users className="size-5 text-muted-foreground" />
           <div>
             <p className="font-semibold">角色跨集一致性报告</p>
-            <p className="text-xs text-muted-foreground">
+            <p className="type-meta text-muted-foreground">
               {reports.length} 个角色 · 整体一致率{" "}
               <span
                 className={cn(
@@ -130,7 +130,7 @@ export function ConsistencyReport({ projectId }: Props) {
           <CardContent className="py-12 text-center text-muted-foreground text-sm">
             <Users className="size-8 mx-auto mb-3 opacity-30" />
             <p>暂无数据</p>
-            <p className="text-xs mt-1">生成角色相关图像并完成 QA 后，数据会自动积累</p>
+            <p className="type-meta mt-1">生成角色相关图像并完成 QA 后，数据会自动积累</p>
           </CardContent>
         </Card>
       ) : (
@@ -210,7 +210,7 @@ export function ConsistencyReport({ projectId }: Props) {
                           </span>
                           <div className="flex flex-wrap gap-1 flex-1">
                             {issue.failTags.map((tag) => (
-                              <Badge key={tag} variant="outline" className="text-[10px] text-amber-500 border-amber-500/30">
+                              <Badge key={tag} variant="outline" className="text-xs text-amber-500 border-amber-500/30">
                                 {TAG_LABELS[tag] ?? tag}
                               </Badge>
                             ))}
