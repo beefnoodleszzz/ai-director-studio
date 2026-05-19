@@ -16,6 +16,7 @@ interface StoryBlockersProps {
   hasOutline: boolean;
   hasLead: boolean;
   hasScript: boolean;
+  scriptPassed?: boolean;
 }
 
 export function StoryBlockers({
@@ -25,12 +26,14 @@ export function StoryBlockers({
   hasOutline,
   hasLead,
   hasScript,
+  scriptPassed = false,
 }: StoryBlockersProps) {
   const healthy = blockers.length === 0;
   const readiness = [
     { label: "剧情大纲", ready: hasOutline },
     { label: "主角锁定", ready: hasLead },
     { label: "剧本确认稿", ready: hasScript },
+    { label: "拆解前预检", ready: scriptPassed },
   ];
 
   return (
@@ -46,7 +49,7 @@ export function StoryBlockers({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-4">
           {readiness.map((item) => (
             <div key={item.label} className="rounded-xl border bg-background/75 px-4 py-3">
               <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">{item.label}</p>

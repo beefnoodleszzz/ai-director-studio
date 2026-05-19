@@ -2,7 +2,7 @@
  * 资产目录管理
  *
  * 目录结构：
- * public/workspace/projects/{projectId}/
+ * workspace/storage/public/projects/{projectId}/
  *   project.json
  *   style-bible.json
  *   characters/{characterId}/
@@ -34,19 +34,26 @@ import fs from "fs";
 import path from "path";
 import axios from "axios";
 
-export const WORKSPACE_DIR = path.join(process.cwd(), "public", "workspace");
+export const APP_DATA_DIR = path.join(
+  /*turbopackIgnore: true*/ process.cwd(),
+  process.env.APP_DATA_DIR?.trim() || "workspace"
+);
+export const WORKSPACE_DIR = path.join(APP_DATA_DIR, "storage");
+export const WORKSPACE_PUBLIC_DIR = path.join(WORKSPACE_DIR, "public");
+export const WORKSPACE_PRIVATE_DIR = path.join(WORKSPACE_DIR, "private");
+export const WORKSPACE_URL_PREFIX = "/workspace";
 
 // ─── 目录路径生成 ─────────────────────────────────────────────────────────────
 
 export const paths = {
   project: (projectId: string) =>
-    path.join(WORKSPACE_DIR, "projects", projectId),
+    path.join(WORKSPACE_PUBLIC_DIR, "projects", projectId),
 
   styleBible: (projectId: string) =>
-    path.join(WORKSPACE_DIR, "projects", projectId, "style-bible.json"),
+    path.join(WORKSPACE_PUBLIC_DIR, "projects", projectId, "style-bible.json"),
 
   character: (projectId: string, characterId: string) =>
-    path.join(WORKSPACE_DIR, "projects", projectId, "characters", characterId),
+    path.join(WORKSPACE_PUBLIC_DIR, "projects", projectId, "characters", characterId),
 
   characterAsset: (
     projectId: string,
@@ -55,7 +62,7 @@ export const paths = {
     filename: string
   ) =>
     path.join(
-      WORKSPACE_DIR,
+      WORKSPACE_PUBLIC_DIR,
       "projects",
       projectId,
       "characters",
@@ -65,11 +72,11 @@ export const paths = {
     ),
 
   episode: (projectId: string, episodeId: string) =>
-    path.join(WORKSPACE_DIR, "projects", projectId, "episodes", episodeId),
+    path.join(WORKSPACE_PUBLIC_DIR, "projects", projectId, "episodes", episodeId),
 
   scene: (projectId: string, episodeId: string, sceneId: string) =>
     path.join(
-      WORKSPACE_DIR,
+      WORKSPACE_PUBLIC_DIR,
       "projects",
       projectId,
       "episodes",
@@ -85,7 +92,7 @@ export const paths = {
     shotId: string
   ) =>
     path.join(
-      WORKSPACE_DIR,
+      WORKSPACE_PUBLIC_DIR,
       "projects",
       projectId,
       "episodes",
@@ -104,7 +111,7 @@ export const paths = {
     takeId: string
   ) =>
     path.join(
-      WORKSPACE_DIR,
+      WORKSPACE_PUBLIC_DIR,
       "projects",
       projectId,
       "episodes",
@@ -119,7 +126,7 @@ export const paths = {
 
   exports: (projectId: string, episodeId: string) =>
     path.join(
-      WORKSPACE_DIR,
+      WORKSPACE_PUBLIC_DIR,
       "projects",
       projectId,
       "episodes",
@@ -128,10 +135,31 @@ export const paths = {
     ),
 
   cache: (projectId: string) =>
-    path.join(WORKSPACE_DIR, "projects", projectId, "cache"),
+    path.join(WORKSPACE_PRIVATE_DIR, "projects", projectId, "cache"),
 
   temp: (projectId: string) =>
-    path.join(WORKSPACE_DIR, "projects", projectId, "temp"),
+    path.join(WORKSPACE_PRIVATE_DIR, "projects", projectId, "temp"),
+
+  takeMeta: (
+    projectId: string,
+    episodeId: string,
+    sceneId: string,
+    shotId: string,
+    takeId: string
+  ) =>
+    path.join(
+      WORKSPACE_PRIVATE_DIR,
+      "projects",
+      projectId,
+      "episodes",
+      episodeId,
+      "scenes",
+      sceneId,
+      "shots",
+      shotId,
+      "takes",
+      takeId
+    ),
 };
 
 // ─── URL 路径生成（用于 HTTP 访问） ────────────────────────────────────────────
@@ -145,7 +173,7 @@ export const urls = {
     takeId: string,
     filename: string
   ) =>
-    `/workspace/projects/${projectId}/episodes/${episodeId}/scenes/${sceneId}/shots/${shotId}/takes/${takeId}/${filename}`,
+    `${WORKSPACE_URL_PREFIX}/projects/${projectId}/episodes/${episodeId}/scenes/${sceneId}/shots/${shotId}/takes/${takeId}/${filename}`,
 
   characterAsset: (
     projectId: string,
@@ -153,7 +181,7 @@ export const urls = {
     type: string,
     filename: string
   ) =>
-    `/workspace/projects/${projectId}/characters/${characterId}/${type}/${filename}`,
+    `${WORKSPACE_URL_PREFIX}/projects/${projectId}/characters/${characterId}/${type}/${filename}`,
 };
 
 // ─── 工具函数 ─────────────────────────────────────────────────────────────────
@@ -166,8 +194,22 @@ function ensureDir(dir: string) {
 
 export function toAbsolutePublicPath(publicUrl: string | null | undefined) {
   if (!publicUrl) return null;
+  if (publicUrl.startsWith(WORKSPACE_URL_PREFIX)) {
+    const normalized = publicUrl.slice(WORKSPACE_URL_PREFIX.length).replace(/^\/+/, "");
+    return path.join(WORKSPACE_PUBLIC_DIR, normalized);
+  }
   const normalized = publicUrl.startsWith("/") ? publicUrl.slice(1) : publicUrl;
-  return path.join(process.cwd(), "public", normalized);
+  return path.join(/*turbopackIgnore: true*/ process.cwd(), "public", normalized);
+}
+
+export function toAbsolutePublicUrl(publicUrl: string | null | undefined) {
+  if (!publicUrl) return null;
+  if (/^https?:\/\//.test(publicUrl)) return publicUrl;
+  const baseUrl =
+    process.env.APP_BASE_URL?.replace(/\/$/, "") ??
+    process.env.NEXT_PUBLIC_APP_BASE_URL?.replace(/\/$/, "") ??
+    "http://localhost:3000";
+  return `${baseUrl}${publicUrl.startsWith("/") ? publicUrl : `/${publicUrl}`}`;
 }
 
 export function removeFileIfExists(targetPath: string | null | undefined) {
@@ -181,6 +223,15 @@ export function removeFileIfExists(targetPath: string | null | undefined) {
 
 export function removePublicUrlIfExists(publicUrl: string | null | undefined) {
   return removeFileIfExists(toAbsolutePublicPath(publicUrl));
+}
+
+export function removeDirIfExists(targetPath: string | null | undefined) {
+  if (!targetPath) return false;
+  if (fs.existsSync(targetPath)) {
+    fs.rmSync(targetPath, { recursive: true, force: true });
+    return true;
+  }
+  return false;
 }
 
 export function initProjectDirs(projectId: string) {
@@ -209,6 +260,14 @@ export function initTakeDirs(
 
 export function initExportDirs(projectId: string, episodeId: string) {
   ensureDir(paths.exports(projectId, episodeId));
+}
+
+export function removeProjectAssetDirs(projectId: string) {
+  removeDirIfExists(paths.project(projectId));
+}
+
+export function removeCharacterAssetDirs(projectId: string, characterId: string) {
+  removeDirIfExists(paths.character(projectId, characterId));
 }
 
 // ─── 资产下载 / 保存 ──────────────────────────────────────────────────────────
@@ -299,6 +358,22 @@ export function saveBase64ToCharacterAsset(
   };
 }
 
+export function saveBufferToCharacterAsset(
+  buffer: Buffer,
+  projectId: string,
+  characterId: string,
+  type: "refs" | "angles" | "expressions" | "wardrobe",
+  filename: string
+): { localPath: string; url: string } {
+  initCharacterDirs(projectId, characterId);
+  const destPath = paths.characterAsset(projectId, characterId, type, filename);
+  fs.writeFileSync(destPath, buffer);
+  return {
+    localPath: destPath,
+    url: urls.characterAsset(projectId, characterId, type, filename),
+  };
+}
+
 export function saveTakeInputJson(
   projectId: string,
   episodeId: string,
@@ -307,7 +382,7 @@ export function saveTakeInputJson(
   takeId: string,
   input: unknown
 ) {
-  const dir = paths.take(projectId, episodeId, sceneId, shotId, takeId);
+  const dir = paths.takeMeta(projectId, episodeId, sceneId, shotId, takeId);
   ensureDir(dir);
   fs.writeFileSync(
     path.join(dir, "input.json"),
@@ -323,7 +398,7 @@ export function saveTakeReviewJson(
   takeId: string,
   review: unknown
 ) {
-  const dir = paths.take(projectId, episodeId, sceneId, shotId, takeId);
+  const dir = paths.takeMeta(projectId, episodeId, sceneId, shotId, takeId);
   ensureDir(dir);
   fs.writeFileSync(
     path.join(dir, "review.json"),
@@ -331,46 +406,10 @@ export function saveTakeReviewJson(
   );
 }
 
-// ─── 兼容旧接口（过渡期保留） ──────────────────────────────────────────────────
-
-/** @deprecated 使用 downloadToTake 代替 */
-export async function downloadAsset(
-  url: string,
-  filename: string
-): Promise<string> {
-  ensureDir(WORKSPACE_DIR);
-  const destPath = path.join(WORKSPACE_DIR, filename);
-  const response = await axios({ url, responseType: "stream" });
-
-  return new Promise<string>((resolve, reject) => {
-    const writer = fs.createWriteStream(destPath);
-    (response.data as NodeJS.ReadableStream).pipe(writer);
-    writer.on("finish", () => resolve(`/workspace/${filename}`));
-    writer.on("error", reject);
-  });
-}
-
-/** @deprecated 使用 saveBase64ToTake 代替 */
-export function saveBase64Asset(base64: string, filename: string): string {
-  ensureDir(WORKSPACE_DIR);
-  const destPath = path.join(WORKSPACE_DIR, filename);
-  fs.writeFileSync(destPath, Buffer.from(base64, "base64"));
-  return `/workspace/${filename}`;
-}
-
-export function assetExists(relativePath: string): boolean {
-  const fullPath = path.join(process.cwd(), "public", relativePath);
-  return fs.existsSync(fullPath);
-}
-
 export function getLocalPath(relativePath: string): string {
-  return path.join(process.cwd(), "public", relativePath);
-}
-
-export function cleanTempDir(projectId: string) {
-  const tmpDir = paths.temp(projectId);
-  if (fs.existsSync(tmpDir)) {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-    ensureDir(tmpDir);
+  const resolved = toAbsolutePublicPath(relativePath);
+  if (!resolved) {
+    throw new Error(`Unable to resolve local path for ${relativePath}`);
   }
+  return resolved;
 }

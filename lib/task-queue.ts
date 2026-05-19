@@ -49,10 +49,29 @@ export interface TaskResult {
   errorReason?: string;
   blockReason?: string;
   blockMeta?: BlockMeta | null;
+  events?: TaskEvent[];
 }
 
 interface TaskRuntimeContext {
   taskId: string;
+}
+
+export type TaskEventType =
+  | "queued"
+  | "running"
+  | "completed"
+  | "retrying"
+  | "failed"
+  | "paused"
+  | "cancelled"
+  | "error"
+  | "recovery";
+
+export interface TaskEvent {
+  timestamp: string;
+  type: TaskEventType | "note";
+  message: string;
+  details?: Record<string, unknown>;
 }
 
 // ─── 内部并发队列（控制同时运行的任务数，不影响持久化） ────────────────────────
@@ -77,6 +96,11 @@ export async function createTask(input: CreateTaskInput): Promise<string> {
       status: "queued",
     },
   });
+  await appendTaskEvent(task.id, "queued", "Task queued", {
+    taskType: input.taskType,
+    taskStage: input.taskStage ?? "",
+    priority: input.priority ?? 0,
+  });
   return task.id;
 }
 
@@ -86,10 +110,24 @@ export async function runTask<T>(
   taskId: string,
   fn: () => Promise<T>
 ): Promise<T> {
-  await prisma.generationTask.update({
-    where: { id: taskId },
+  const claimed = await prisma.generationTask.updateMany({
+    where: {
+      id: taskId,
+      status: { in: ["queued", "retrying"] },
+    },
     data: { status: "running", startedAt: new Date() },
   });
+
+  if (claimed.count === 0) {
+    const existing = await prisma.generationTask.findUnique({
+      where: { id: taskId },
+      select: { status: true },
+    });
+    if (!existing) throw new Error(`Task ${taskId} not found`);
+    throw new Error(`Task ${taskId} cannot be started from status ${existing.status}`);
+  }
+
+  await appendTaskEvent(taskId, "running", "Task started");
 
   return pQueue.add(async () => {
     const task = await prisma.generationTask.findUnique({
@@ -100,7 +138,7 @@ export async function runTask<T>(
     const attempts = task.attempts + 1;
     await prisma.generationTask.update({
       where: { id: taskId },
-      data: { attempts, status: "running" },
+      data: { attempts },
     });
 
     try {
@@ -113,20 +151,33 @@ export async function runTask<T>(
           outputRef: result ? JSON.stringify(result) : "",
         },
       });
+      await appendTaskEvent(taskId, "completed", "Task completed");
       return result;
     } catch (err) {
       const errorReason = err instanceof Error ? err.message : String(err);
-      await appendTaskLog(taskId, `[ERROR] attempt ${attempts}: ${errorReason}`);
+      await appendTaskEvent(taskId, "error", `Attempt ${attempts} failed`, {
+        errorReason,
+        attempt: attempts,
+      });
 
       if (attempts >= task.maxAttempts) {
         await prisma.generationTask.update({
           where: { id: taskId },
           data: { status: "failed", errorReason, completedAt: new Date() },
         });
+        await appendTaskEvent(taskId, "failed", "Task failed", {
+          errorReason,
+          attempt: attempts,
+        });
       } else {
         await prisma.generationTask.update({
           where: { id: taskId },
           data: { status: "retrying", errorReason },
+        });
+        await appendTaskEvent(taskId, "retrying", "Task scheduled for retry", {
+          errorReason,
+          attempt: attempts,
+          maxAttempts: task.maxAttempts,
         });
       }
       throw err;
@@ -155,10 +206,11 @@ export async function markCurrentTaskBlocked(input: {
     },
   });
 
-  await appendTaskLog(
-    taskId,
-    `[BLOCKED] ${input.blockReason}: ${input.blockMeta.message}`
-  );
+  await appendTaskEvent(taskId, "paused", input.blockMeta.message, {
+    blockReason: input.blockReason,
+    stage: input.blockMeta.stage,
+    details: input.blockMeta.details,
+  });
 }
 
 // ─── 便捷：创建 + 运行 ─────────────────────────────────────────────────────────
@@ -172,15 +224,85 @@ export async function enqueueTask<T>(
   return { taskId, result };
 }
 
+export async function dispatchTask<T>(
+  input: CreateTaskInput,
+  fn: () => Promise<T>
+): Promise<{ taskId: string }> {
+  const taskId = await createTask(input);
+  void runTask(taskId, fn).catch((error) => {
+    console.error(`[task-queue] background task ${taskId} failed`, error);
+  });
+  return { taskId };
+}
+
 // ─── 日志追加 ─────────────────────────────────────────────────────────────────
 
 export async function appendTaskLog(taskId: string, message: string) {
+  await appendTaskEvent(taskId, "note", message);
+}
+
+export function parseTaskEvents(rawLogs: string | null | undefined): TaskEvent[] {
+  if (!rawLogs) return [];
+
+  return rawLogs
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const structuredMatch = line.match(/^\[(.+?)\]\s+(\{.*\})$/);
+      if (structuredMatch) {
+        const [, timestamp, rawJson] = structuredMatch;
+        try {
+          const parsed = JSON.parse(rawJson) as Omit<TaskEvent, "timestamp">;
+          return {
+            timestamp,
+            type: parsed.type ?? "note",
+            message: parsed.message ?? "",
+            ...(parsed.details ? { details: parsed.details } : {}),
+          } satisfies TaskEvent;
+        } catch {
+          // fall through to legacy parsing
+        }
+      }
+
+      const legacyMatch = line.match(/^\[(.+?)\]\s+(.*)$/);
+      if (legacyMatch) {
+        return {
+          timestamp: legacyMatch[1],
+          type: "note",
+          message: legacyMatch[2],
+        } satisfies TaskEvent;
+      }
+
+      return {
+        timestamp: new Date(0).toISOString(),
+        type: "note",
+        message: line,
+      } satisfies TaskEvent;
+    });
+}
+
+export async function appendTaskEvent(
+  taskId: string,
+  type: TaskEvent["type"],
+  message: string,
+  details?: Record<string, unknown>
+) {
   const task = await prisma.generationTask.findUnique({ where: { id: taskId } });
   if (!task) return;
   const timestamp = new Date().toISOString();
-  const newLog = task.logs
-    ? `${task.logs}\n[${timestamp}] ${message}`
-    : `[${timestamp}] ${message}`;
+  const event: TaskEvent = {
+    timestamp,
+    type,
+    message,
+    ...(details ? { details } : {}),
+  };
+  const serialized = `[${timestamp}] ${JSON.stringify({
+    type: event.type,
+    message: event.message,
+    ...(event.details ? { details: event.details } : {}),
+  })}`;
+  const newLog = task.logs ? `${task.logs}\n${serialized}` : serialized;
   await prisma.generationTask.update({
     where: { id: taskId },
     data: { logs: newLog },
@@ -194,6 +316,7 @@ export async function cancelTask(taskId: string) {
     where: { id: taskId },
     data: { status: "cancelled", completedAt: new Date() },
   });
+  await appendTaskEvent(taskId, "cancelled", "Task cancelled");
 }
 
 // ─── 暂停任务 ─────────────────────────────────────────────────────────────────
@@ -203,6 +326,7 @@ export async function pauseTask(taskId: string) {
     where: { id: taskId },
     data: { status: "paused" },
   });
+  await appendTaskEvent(taskId, "paused", "Task paused");
 }
 
 // ─── 恢复任务 ─────────────────────────────────────────────────────────────────
@@ -212,6 +336,7 @@ export async function resumeTask(taskId: string) {
     where: { id: taskId },
     data: { status: "queued" },
   });
+  await appendTaskEvent(taskId, "queued", "Task re-queued");
 }
 
 // ─── 查询任务状态 ─────────────────────────────────────────────────────────────
@@ -234,6 +359,7 @@ export async function getTaskStatus(taskId: string): Promise<TaskResult | null> 
     errorReason: task.errorReason || undefined,
     blockReason: task.blockReason || undefined,
     blockMeta,
+    events: parseTaskEvents(task.logs),
   };
 }
 

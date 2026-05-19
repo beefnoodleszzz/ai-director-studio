@@ -18,7 +18,21 @@ interface Episode {
   hook: string;
   cliffhanger: string;
   productionStage: string;
-  scenes: { id: string; shots: { id: string; pipelineStage: string; exportReadiness: string }[] }[];
+  scenes: {
+    id: string;
+    shots: {
+      id: string;
+      pipelineStage: string;
+      exportReadiness: string;
+      dramaticTag?: string;
+      risk?: {
+        isCritical: boolean;
+        missingVideo: boolean;
+        imageFallbackOnly: boolean;
+        criticalNeedsVideo: boolean;
+      };
+    }[];
+  }[];
 }
 
 const EPISODE_STAGE_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
@@ -98,6 +112,8 @@ export default function EpisodesPage({ params }: { params: Promise<{ id: string 
           {episodes.map((ep) => {
             const shots = ep.scenes.flatMap((s) => s.shots);
             const done = shots.filter((sh) => sh.pipelineStage === "ready_for_export" || sh.pipelineStage === "video_ready").length;
+            const criticalShots = shots.filter((sh) => sh.risk?.isCritical);
+            const criticalVideoRisks = shots.filter((sh) => sh.risk?.criticalNeedsVideo).length;
             const stageInfo = EPISODE_STAGE_LABELS[ep.productionStage] ?? EPISODE_STAGE_LABELS.idea;
             return (
               <Link key={ep.id} href={`/projects/${projectId}/episodes/${ep.id}`}>
@@ -113,11 +129,18 @@ export default function EpisodesPage({ params }: { params: Promise<{ id: string 
                           <p className="type-meta text-muted-foreground mt-1">
                             {shots.length} 个镜头
                             {shots.length > 0 && ` · ${done}/${shots.length} 已生成`}
+                            {criticalShots.length > 0 && ` · ${criticalShots.length} 个关键镜头`}
+                            {criticalVideoRisks > 0 && ` · ${criticalVideoRisks} 个关键镜头待视频化`}
                             {ep.summary && ` · ${ep.summary.slice(0, 40)}…`}
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
+                        {criticalVideoRisks > 0 ? (
+                          <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-700">
+                            关键镜头风险
+                          </Badge>
+                        ) : null}
                         <Badge
                           variant={stageInfo.variant}
                           className="text-[10px]"

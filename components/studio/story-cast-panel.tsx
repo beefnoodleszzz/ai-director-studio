@@ -38,6 +38,7 @@ interface StoryCastPanelProps {
   pendingCharacters: PendingCharacter[];
   onLeadChange: (value: string) => void;
   onGenerate: () => void;
+  onGenerateWithAssets: () => void;
   onSave: () => void;
   onLockLead: () => void;
   onFieldChange: (characterId: string, field: keyof CharacterLite, value: string) => void;
@@ -53,6 +54,7 @@ export function StoryCastPanel({
   pendingCharacters,
   onLeadChange,
   onGenerate,
+  onGenerateWithAssets,
   onSave,
   onLockLead,
   onFieldChange,
@@ -89,6 +91,14 @@ export function StoryCastPanel({
           <Button onClick={onGenerate} disabled={working !== null}>
             {working === "cast" ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Sparkles className="mr-2 size-4" />}
             AI 生成角色
+          </Button>
+          <Button variant="outline" onClick={onGenerateWithAssets} disabled={working !== null}>
+            {working === "cast-assets" ? (
+              <Loader2 className="mr-2 size-4 animate-spin" />
+            ) : (
+              <Sparkles className="mr-2 size-4" />
+            )}
+            AI 生成角色+资产
           </Button>
           <Button variant="outline" onClick={onSave} disabled={working !== null || characters.length === 0}>
             {working === "save-cast" ? <Loader2 className="mr-2 size-4 animate-spin" /> : <PencilLine className="mr-2 size-4" />}

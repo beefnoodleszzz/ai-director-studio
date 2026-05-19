@@ -3,6 +3,50 @@ import { prisma } from "@/lib/prisma";
 import { removePublicUrlIfExists } from "@/lib/asset";
 import { normalizeShotStateById } from "@/lib/production-state";
 import { parseBlockMeta } from "@/lib/studio-contracts";
+import { validateShotPatchBody } from "@/lib/route-validation";
+
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ shotId: string }> }
+) {
+  try {
+    const { shotId } = await params;
+    const shot = await prisma.shot.findUnique({
+      where: { id: shotId },
+      include: {
+        takes: {
+          include: { reviews: { orderBy: { reviewedAt: "desc" }, take: 1 } },
+          orderBy: { createdAt: "desc" },
+        },
+      },
+    });
+
+    if (!shot) {
+      return NextResponse.json({ error: "Shot not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      ...shot,
+      blockMeta: parseBlockMeta(shot.blockMeta),
+      takes: shot.takes.map((take) => {
+        let paramsSnapshotJson: Record<string, unknown> | null = null;
+        try {
+          paramsSnapshotJson = take.paramsSnapshot ? JSON.parse(take.paramsSnapshot) : null;
+        } catch {
+          paramsSnapshotJson = null;
+        }
+
+        return {
+          ...take,
+          paramsSnapshotJson,
+        };
+      }),
+    });
+  } catch (err) {
+    console.error("[GET /api/shots/:shotId]", err);
+    return NextResponse.json({ error: "Failed" }, { status: 500 });
+  }
+}
 
 export async function PATCH(
   req: NextRequest,
@@ -10,10 +54,11 @@ export async function PATCH(
 ) {
   try {
     const { shotId } = await params;
-    const body = (await req.json()) as {
-      autoContinue?: boolean;
-      clearBlock?: boolean;
-    };
+    const parsed = validateShotPatchBody(await req.json().catch(() => ({})));
+    if (!parsed.ok) {
+      return parsed.response;
+    }
+    const body = parsed.value;
 
     const shot = await prisma.shot.findUnique({ where: { id: shotId } });
     if (!shot) return NextResponse.json({ error: "Shot not found" }, { status: 404 });

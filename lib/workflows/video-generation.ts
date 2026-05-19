@@ -14,7 +14,7 @@ import axios from "axios";
 import ffmpeg from "fluent-ffmpeg";
 import { prisma } from "@/lib/prisma";
 import { downloadToTake, saveTakeInputJson, initTakeDirs, getLocalPath } from "@/lib/asset";
-import { enqueueTask, markCurrentTaskBlocked } from "@/lib/task-queue";
+import { dispatchTask, markCurrentTaskBlocked } from "@/lib/task-queue";
 import { generateId, sleep } from "@/lib/utils";
 import { recommendProvider } from "@/lib/provider-recommender";
 import { normalizeShotStateById, recalculateEpisodeStage } from "@/lib/production-state";
@@ -284,7 +284,10 @@ export async function generateShotVideo(input: VideoGenInput): Promise<GenerateV
     },
   });
 
-  const subjectSummary = input.subjectSummary ?? await buildSubjectSummary(shot.subjectCharIds);
+  const subjectSummary = input.subjectSummary ?? await buildSubjectSummary(shot.subjectCharIds, {
+    visualPrompt: shot.visualPrompt,
+    actionDesc: shot.actionDesc,
+  });
   const continuity = await buildContinuityContext({
     shotId,
     sceneId,
@@ -295,6 +298,19 @@ export async function generateShotVideo(input: VideoGenInput): Promise<GenerateV
     cameraAngle: shot.cameraAngle,
     emotionGoal: shot.emotionGoal,
   });
+
+  // 读取 StyleBible 注入视觉风格一致性
+  const sceneRecord = await prisma.scene.findUnique({
+    where: { id: sceneId },
+    select: { episode: { select: { project: { select: { styleBible: true } } } } },
+  });
+  const styleBible = sceneRecord?.episode.project.styleBible
+    ? {
+        visualStyle: sceneRecord.episode.project.styleBible.visualStyle,
+        colorStrategy: sceneRecord.episode.project.styleBible.colorStrategy,
+      }
+    : undefined;
+
   const constrainedPrompt = composeVideoPrompt({
     basePrompt: `${visualPrompt}${selectedAssets.summary ? `, selected role assets: ${selectedAssets.summary}` : ""}`,
     subjectSummary,
@@ -306,12 +322,13 @@ export async function generateShotVideo(input: VideoGenInput): Promise<GenerateV
       ])
     ),
     continuitySummary: continuity.summary,
+    styleBible,
   });
 
   // 自动推荐最优视频 provider
   let resolvedProvider = provider;
   if (!resolvedProvider) {
-    const rec = await recommendProvider(projectId, "video", "kling");
+    const rec = await recommendProvider(projectId, "video", process.env.VIDEO_PROVIDER ?? "seedance");
     resolvedProvider = rec.provider;
     console.log(`[video-gen] Auto-selected provider: ${rec.provider} — ${rec.reason}`);
   }
@@ -500,7 +517,11 @@ export async function generateShotVideo(input: VideoGenInput): Promise<GenerateV
   throw new Error(`Video generation failed after ${maxAttempts} attempts for shot ${shotId}`);
 }
 
-async function buildSubjectSummary(subjectCharIdsRaw: string | null | undefined) {
+async function buildSubjectSummary(
+  subjectCharIdsRaw: string | null | undefined,
+  /** visualPrompt（英文）用于匹配英文角色名；actionDesc（中文）用于匹配中文角色名 */
+  texts?: { visualPrompt?: string; actionDesc?: string }
+) {
   if (!subjectCharIdsRaw) return "";
   let ids: string[] = [];
   try {
@@ -513,12 +534,39 @@ async function buildSubjectSummary(subjectCharIdsRaw: string | null | undefined)
     where: { id: { in: ids } },
     select: {
       name: true,
+      isLead: true,
       anchorFace: true,
       anchorHair: true,
       wardrobeBase: true,
       temperamentTags: true,
     },
   });
+
+  // 主角始终排第一，防止配角特征（尤其是老年角色）污染主角生成
+  characters.sort((a, b) => Number(b.isLead) - Number(a.isLead));
+
+  // 只注入在当前镜头实际出现的角色描述（场次级 subjectCharIds 包含全场所有角色）
+  // 同时检查英文 visualPrompt 和中文 actionDesc，避免只看一种语言遗漏
+  const combined = `${texts?.visualPrompt ?? ""} ${texts?.actionDesc ?? ""}`.toLowerCase();
+  if (combined.trim().length > 20) {
+    const mentioned = characters.filter((c) =>
+      combined.includes(c.name.toLowerCase())
+    );
+    // 主角始终保留，即使没被明确提名
+    const leads = characters.filter((c) => c.isLead);
+    const merged = Array.from(
+      new Map([...leads, ...mentioned].map((c) => [c.name, c])).values()
+    );
+    if (merged.length > 0) {
+      merged.sort((a, b) => Number(b.isLead) - Number(a.isLead));
+      return merged
+        .map((c) =>
+          `${c.name}: face=${c.anchorFace}; hair=${c.anchorHair}; wardrobe=${c.wardrobeBase}; aura=${c.temperamentTags}`
+        )
+        .join(" | ");
+    }
+  }
+
   return characters
     .map((c) =>
       `${c.name}: face=${c.anchorFace}; hair=${c.anchorHair}; wardrobe=${c.wardrobeBase}; aura=${c.temperamentTags}`
@@ -529,7 +577,7 @@ async function buildSubjectSummary(subjectCharIdsRaw: string | null | undefined)
 // ─── 含任务追踪的包装入口 ─────────────────────────────────────────────────────
 
 export async function generateShotVideoWithTask(input: VideoGenInput) {
-  return enqueueTask(
+  return dispatchTask(
     {
       projectId: input.projectId,
       shotId: input.shotId,

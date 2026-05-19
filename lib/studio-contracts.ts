@@ -43,6 +43,9 @@ export type BlockReasonCode =
   | "video-qa-failed"
   | "audio-qa-failed"
   | "continuity-check-failed"
+  | "script-content-failed"
+  | "missing-dialogue-main-track"
+  | "critical-shot-fallback"
   | "manual-review-required";
 
 export interface BlockMeta {

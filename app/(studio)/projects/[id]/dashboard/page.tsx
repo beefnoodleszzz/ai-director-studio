@@ -12,41 +12,7 @@ import Link from "next/link";
 import axios from "axios";
 import { cn } from "@/lib/utils";
 import { ProjectPageShell } from "@/components/studio/ProjectPageShell";
-
-interface DashboardData {
-  takeStats: {
-    total: number;
-    passed: number;
-    warned: number;
-    failed: number;
-    unreviewed: number;
-    passRate: number;
-    wastageRate: number;
-  };
-  shotStats: {
-    total: number;
-    draft: number;
-    generating: number;
-    imageDone: number;
-    videoDone: number;
-    failed: number;
-  };
-  taskStats: {
-    total: number;
-    completed: number;
-    failed: number;
-    queued: number;
-    running: number;
-    avgAttempts: number;
-  };
-  providerStats: Array<{
-    provider: string;
-    total: number;
-    passRate: number;
-    failRate: number;
-    avgScore: number;
-  }>;
-}
+import type { DashboardData } from "@/lib/contracts/dashboard";
 
 export default function DashboardPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: projectId } = use(params);
@@ -81,7 +47,7 @@ export default function DashboardPage({ params }: { params: Promise<{ id: string
     );
   }
 
-  const { takeStats, shotStats, taskStats, providerStats } = data;
+  const { takeStats, shotStats, taskStats, providerStats, contentStats } = data;
 
   return (
     <ProjectPageShell
@@ -166,17 +132,30 @@ export default function DashboardPage({ params }: { params: Promise<{ id: string
           {[
             { label: "总镜头", value: shotStats.total, color: "text-foreground" },
             { label: "草稿", value: shotStats.draft, color: "text-muted-foreground" },
-            { label: "首帧完成", value: shotStats.imageDone, color: "text-sky-500" },
-            { label: "视频完成", value: shotStats.videoDone, color: "text-green-500" },
-            { label: "失败", value: shotStats.failed, color: "text-destructive" },
+            { label: "首帧完成", value: shotStats.imageReady, color: "text-sky-500" },
+            { label: "视频完成", value: shotStats.videoReady, color: "text-green-500" },
+            { label: "阻断", value: shotStats.blocked, color: "text-destructive" },
           ].map(({ label, value, color }) => (
             <StatCard key={label} label={label} value={value} color={color} />
           ))}
         </div>
         <Progress
-          value={shotStats.total > 0 ? (shotStats.videoDone / shotStats.total) * 100 : 0}
+          value={shotStats.total > 0 ? (shotStats.videoReady / shotStats.total) * 100 : 0}
           className="h-2"
         />
+      </section>
+
+      <Separator />
+
+      <section className="space-y-3">
+        <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">仙侠样板指标</p>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <StatCard label="开场钩子达标" value={`${contentStats.hookPassRate}%`} color={contentStats.hookPassRate >= 80 ? "text-green-500" : "text-amber-500"} />
+          <StatCard label="升级达标率" value={`${contentStats.escalationPassRate}%`} color={contentStats.escalationPassRate >= 80 ? "text-green-500" : "text-amber-500"} />
+          <StatCard label="悬点达标率" value={`${contentStats.cliffhangerPassRate}%`} color={contentStats.cliffhangerPassRate >= 80 ? "text-green-500" : "text-amber-500"} />
+          <StatCard label="关键镜头视频化" value={`${contentStats.criticalVideoRate}%`} color={contentStats.criticalVideoRate >= 70 ? "text-green-500" : "text-amber-500"} />
+          <StatCard label="对白完整率" value={`${contentStats.dialogueCoverageRate}%`} color={contentStats.dialogueCoverageRate >= 90 ? "text-green-500" : "text-destructive"} />
+        </div>
       </section>
 
       <Separator />

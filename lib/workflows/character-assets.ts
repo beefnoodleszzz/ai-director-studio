@@ -8,6 +8,13 @@ import {
 } from "@/lib/studio-contracts";
 import { downloadCharacterAsset, saveBase64ToCharacterAsset } from "@/lib/asset";
 import { generateId } from "@/lib/utils";
+import {
+  DEFAULT_IMAGE_PROVIDER,
+  buildImageGenerationBody,
+  extractGeneratedImage,
+  resolveImageProviderConfig,
+  resolveImageRequestTimeoutMs,
+} from "@/lib/image-api";
 
 type CharacterAssetRecord = {
   id: string;
@@ -46,6 +53,11 @@ interface CharacterImageProvider {
   generate(prompt: string, refImageUrls?: string[]): Promise<CharacterImageProviderResult>;
 }
 
+interface GenerateCharacterAssetPackOptions {
+  assetTypes?: string[];
+  limit?: number;
+}
+
 function dedupe<T>(values: T[]): T[] {
   return Array.from(new Set(values));
 }
@@ -66,58 +78,66 @@ function buildGeneratedLabel(characterName: string, assetType: string) {
   return `${characterName}-${suffix}`;
 }
 
-function isVolcengineArkBaseUrl(baseUrl: string) {
-  return baseUrl.includes("volces.com") || baseUrl.includes("ark.cn-beijing");
-}
+class SakuraCharacterProvider implements CharacterImageProvider {
+  name = DEFAULT_IMAGE_PROVIDER;
 
-class SeedreamCharacterProvider implements CharacterImageProvider {
-  name = "seedream";
+  async generate(prompt: string, _refImageUrls?: string[]) {
+    void _refImageUrls;
 
-  async generate(prompt: string, refImageUrls?: string[]) {
-    const apiKey = process.env.SEEDREAM_API_KEY;
-    const baseUrl = process.env.SEEDREAM_BASE_URL ?? "https://api.seedream.io/v1";
-    if (!apiKey) throw new Error("SEEDREAM_API_KEY is not configured");
+    const { apiKey, baseUrl } = resolveImageProviderConfig();
+    if (!apiKey) throw new Error("IMAGE_API_KEY is not configured");
 
-    const isArk = isVolcengineArkBaseUrl(baseUrl);
-    const body: Record<string, unknown> = { prompt, aspect_ratio: "9:16" };
-
-    if (isArk) {
-      const model = process.env.IMAGE_MODEL ?? process.env.SEEDREAM_MODEL;
-      if (!model) {
-        throw new Error(
-          "使用火山方舟地址时必须在环境变量中配置 IMAGE_MODEL（或 SEEDREAM_MODEL），例如 doubao-seedream-4.5"
-        );
-      }
-      body.model = model;
-      body.response_format = "url";
-      if (refImageUrls && refImageUrls.length > 0) {
-        body.image = refImageUrls.length === 1 ? refImageUrls[0] : refImageUrls;
-      }
-    } else if (refImageUrls && refImageUrls.length > 0) {
-      body.image_url = refImageUrls[0];
-    }
-
-    const response = await axios.post(`${baseUrl}/images/generations`, body, {
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      timeout: 120_000,
+    const body = buildImageGenerationBody(prompt, {
+      aspectRatio: process.env.CHARACTER_IMAGE_ASPECT_RATIO ?? "1:1",
     });
 
-    const imageUrl: string =
-      response.data?.data?.[0]?.url ??
-      response.data?.images?.[0]?.url ??
-      response.data?.output?.images?.[0];
+    let lastError: unknown;
 
-    if (!imageUrl) throw new Error("Seedream returned no image URL");
-    return { imageUrl };
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
+        const response = await axios.post(`${baseUrl}/images/generations`, body, {
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          timeout: resolveImageRequestTimeoutMs(),
+        });
+
+        return extractGeneratedImage(response.data);
+      } catch (e) {
+        lastError = e;
+
+        if (axios.isAxiosError(e) && e.response) {
+          const detail =
+            typeof e.response.data === "object"
+              ? JSON.stringify(e.response.data)
+              : String(e.response.data);
+          const code = e.response.headers["x-error-code"] ?? e.response.headers["x-request-id"];
+          const message =
+            `Sakura image API HTTP ${e.response.status}${code ? ` (${String(code)})` : ""}: ${detail}`;
+
+          if (attempt < 2 && e.response.status === 524) {
+            continue;
+          }
+
+          throw new Error(message);
+        }
+
+        if (attempt === 2) {
+          throw e;
+        }
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error("Character image generation failed");
   }
 }
 
+const sakuraCharacterProvider = new SakuraCharacterProvider();
 const CHARACTER_IMAGE_PROVIDERS: Record<string, CharacterImageProvider> = {
-  seedream: new SeedreamCharacterProvider(),
+  [DEFAULT_IMAGE_PROVIDER]: sakuraCharacterProvider,
+  seedream: sakuraCharacterProvider,
 };
 
 function getCharacterImageProvider(name?: string): CharacterImageProvider {
-  const key = name ?? process.env.IMAGE_PROVIDER ?? "seedream";
+  const key = name ?? process.env.IMAGE_PROVIDER ?? DEFAULT_IMAGE_PROVIDER;
   const provider = CHARACTER_IMAGE_PROVIDERS[key];
   if (!provider) throw new Error(`Unknown character image provider: ${key}`);
   return provider;
@@ -201,6 +221,28 @@ export async function syncCharacterAssetStatus(characterId: string) {
 }
 
 export async function generateCharacterCoreAssetPack(projectId: string, characterId: string): Promise<GeneratedCharacterAssetPack> {
+  return generateCharacterCoreAssetPackWithOptions(projectId, characterId);
+}
+
+function normalizeRequestedAssetTypes(assetTypes?: string[]) {
+  if (!assetTypes?.length) return [];
+
+  return dedupe(
+    assetTypes
+      .map((assetType) => normalizeCharacterAssetType(assetType))
+      .filter((assetType) =>
+        CHARACTER_ASSET_READY_TYPES.includes(
+          assetType as (typeof CHARACTER_ASSET_READY_TYPES)[number]
+        )
+      )
+  );
+}
+
+export async function generateCharacterCoreAssetPackWithOptions(
+  projectId: string,
+  characterId: string,
+  options?: GenerateCharacterAssetPackOptions
+): Promise<GeneratedCharacterAssetPack> {
   const character = await prisma.characterBible.findUnique({
     where: { id: characterId },
     include: {
@@ -220,14 +262,43 @@ export async function generateCharacterCoreAssetPack(projectId: string, characte
     normalizedAssets.find((asset) => asset.assetType === "reference-main") ??
     normalizedAssets.find((asset) => asset.assetType !== "other") ??
     normalizedAssets[0];
+  const imageProvider = getCharacterImageProvider();
+  let ensuredSeedAsset = seedAsset;
+  const createdAssets: CharacterAssetRecord[] = [];
 
-  if (!seedAsset) {
-    throw new Error("At least one reference asset is required before generating the core pack");
+  if (!ensuredSeedAsset) {
+    const seedPrompt = buildCharacterAssetPrompt(character, "reference-main");
+    const seedGeneration = await imageProvider.generate(seedPrompt);
+    const fileId = generateId();
+    const fileName = `reference-main-${fileId}.jpg`;
+    const saved = seedGeneration.base64
+      ? saveBase64ToCharacterAsset(seedGeneration.base64, projectId, characterId, "refs", fileName)
+      : await downloadCharacterAsset(seedGeneration.imageUrl, projectId, characterId, "refs", fileName);
+    ensuredSeedAsset = await prisma.characterAsset.create({
+      data: {
+        characterId,
+        assetType: "reference-main",
+        label: buildGeneratedLabel(character.name, "reference-main"),
+        localPath: saved.url,
+        url: saved.url,
+        tags: JSON.stringify(["generated-seed", "reference-main"]),
+      },
+    });
+    createdAssets.push(ensuredSeedAsset);
+    normalizedAssets.push(normalizeCharacterAssetRecord(ensuredSeedAsset));
+    presentTypes.add("reference-main");
   }
 
-  const missingTypes = CHARACTER_ASSET_READY_TYPES.filter((type) => !presentTypes.has(type));
-  const createdAssets: CharacterAssetRecord[] = [];
-  const imageProvider = getCharacterImageProvider();
+  const requestedTypes = normalizeRequestedAssetTypes(options?.assetTypes);
+  const missingTypesSource =
+    requestedTypes.length > 0
+      ? requestedTypes.filter((type) => !presentTypes.has(type))
+      : CHARACTER_ASSET_READY_TYPES.filter((type) => !presentTypes.has(type));
+  const batchLimit =
+    typeof options?.limit === "number" && Number.isFinite(options.limit) && options.limit > 0
+      ? Math.floor(options.limit)
+      : missingTypesSource.length;
+  const missingTypes = missingTypesSource.slice(0, batchLimit);
   const referenceUrls = normalizedAssets
     .filter((asset) => asset.assetType !== "other")
     .map((asset) => asset.localPath)
@@ -250,10 +321,11 @@ export async function generateCharacterCoreAssetPack(projectId: string, characte
         label: buildGeneratedLabel(character.name, assetType),
         localPath: saved.url,
         url: saved.url,
-        tags: buildGeneratedTags(assetType, seedAsset.tags),
+        tags: buildGeneratedTags(assetType, ensuredSeedAsset.tags),
       },
     });
     createdAssets.push(created);
+    referenceUrls.push(saved.url);
   }
 
   const snapshot = await syncCharacterAssetStatus(characterId);

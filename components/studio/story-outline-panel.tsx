@@ -16,9 +16,14 @@ interface OutlineCharacter {
 
 interface EpisodeBeat {
   episode: string;
+  title?: string;
   beat: string;
   hook: string;
   cliffhanger: string;
+  openingTrigger?: string;
+  pressureSource?: string;
+  escalation?: string;
+  sceneGoal?: string;
 }
 
 interface StoryOutlineShape {
@@ -28,6 +33,7 @@ interface StoryOutlineShape {
   keySuspense: string;
   outlineCharacters: OutlineCharacter[];
   episodeBeats: EpisodeBeat[];
+  blockers?: Array<{ code: string; title: string; detail: string }>;
 }
 
 interface StoryOutlinePanelProps {
@@ -84,7 +90,7 @@ export function StoryOutlinePanel({
           <div className="rounded-2xl border bg-muted/20 p-4">
             <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">分集节拍</p>
             <p className="mt-2 text-2xl font-semibold">{outline.episodeBeats.length}</p>
-            <p className="mt-1 text-sm text-muted-foreground">每一集至少要有推进点、开场 hook 和结尾悬点。</p>
+            <p className="mt-1 text-sm text-muted-foreground">每一集至少要有异常开场、压迫来源、升级节点和结尾悬点。</p>
           </div>
           <div className="rounded-2xl border bg-muted/20 p-4">
             <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">下一阶段交接</p>
@@ -92,6 +98,20 @@ export function StoryOutlinePanel({
             <p className="mt-1 text-sm text-muted-foreground">大纲越清楚，后续主角锁定和单集正文漂移越少。</p>
           </div>
         </div>
+
+        {outline.blockers && outline.blockers.length > 0 ? (
+          <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-4">
+            <p className="text-sm font-medium">当前大纲还未完全达到仙侠样板标准</p>
+            <div className="mt-3 space-y-2">
+              {outline.blockers.map((blocker) => (
+                <div key={blocker.code} className="rounded-xl border bg-background/80 px-3 py-2">
+                  <p className="text-sm font-medium">{blocker.title}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{blocker.detail}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <Tabs defaultValue="structured" className="space-y-4">
           <TabsList className="grid w-full grid-cols-2">
@@ -196,20 +216,39 @@ export function StoryOutlinePanel({
                         <p className="text-xs text-muted-foreground">建议把这一集写成一个明确的推进单元，而不是泛泛剧情摘要。</p>
                       </div>
                     </div>
-                    <div className="grid gap-3 md:grid-cols-[160px_minmax(0,1fr)_auto]">
+                    <div className="grid gap-3 md:grid-cols-[140px_minmax(0,1fr)_auto]">
                       <Input
                         value={beat.episode}
                         onChange={(e) => onBeatChange(index, "episode", e.target.value)}
                         placeholder="第几集"
                       />
                       <Input
-                        value={beat.beat}
-                        onChange={(e) => onBeatChange(index, "beat", e.target.value)}
-                        placeholder="本集核心推进"
+                        value={beat.title ?? ""}
+                        onChange={(e) => onBeatChange(index, "title", e.target.value)}
+                        placeholder="集标题"
                       />
                       <Button variant="ghost" size="icon" onClick={() => onRemoveBeat(index)}>
                         <Trash2 className="size-4" />
                       </Button>
+                    </div>
+                    <Input
+                      value={beat.beat}
+                      onChange={(e) => onBeatChange(index, "beat", e.target.value)}
+                      placeholder="本集核心推进"
+                    />
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <Textarea
+                        value={beat.openingTrigger ?? ""}
+                        onChange={(e) => onBeatChange(index, "openingTrigger", e.target.value)}
+                        placeholder="开场异常 / 羞辱 / 即时代价"
+                        rows={2}
+                      />
+                      <Textarea
+                        value={beat.pressureSource ?? ""}
+                        onChange={(e) => onBeatChange(index, "pressureSource", e.target.value)}
+                        placeholder="压迫来源"
+                        rows={2}
+                      />
                     </div>
                     <div className="grid gap-3 md:grid-cols-2">
                       <Textarea
@@ -225,8 +264,22 @@ export function StoryOutlinePanel({
                         rows={2}
                       />
                     </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <Textarea
+                        value={beat.escalation ?? ""}
+                        onChange={(e) => onBeatChange(index, "escalation", e.target.value)}
+                        placeholder="本集升级节点"
+                        rows={2}
+                      />
+                      <Textarea
+                        value={beat.sceneGoal ?? ""}
+                        onChange={(e) => onBeatChange(index, "sceneGoal", e.target.value)}
+                        placeholder="后续拆解目标"
+                        rows={2}
+                      />
+                    </div>
                     <div className="rounded-xl border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
-                      交给下一阶段时，这一集至少要说清楚：主角在这集想要什么、遭遇什么阻力、靠什么 hook 把观众拉进来、用什么 cliffhanger 把观众留到下一集。
+                      交给下一阶段时，这一集至少要说清楚：开场先抛什么异常、谁在压主角、冲突怎么升级、最后拿什么把观众留到下一集。
                     </div>
                   </div>
                 ))}

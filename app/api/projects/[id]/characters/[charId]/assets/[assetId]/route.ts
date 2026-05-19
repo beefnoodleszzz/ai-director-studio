@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import path from "path";
-import fs from "fs";
 import { prisma } from "@/lib/prisma";
+import { removePublicUrlIfExists } from "@/lib/asset";
 import {
   normalizeCharacterAssetRecord,
   syncCharacterAssetStatus,
@@ -13,17 +12,18 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; charId: string; assetId: string }> }
 ) {
   try {
-    const { assetId, charId } = await params;
+    const { id: projectId, assetId, charId } = await params;
 
-    const asset = await prisma.characterAsset.findUnique({ where: { id: assetId } });
+    const asset = await prisma.characterAsset.findFirst({
+      where: {
+        id: assetId,
+        characterId: charId,
+        character: { projectId },
+      },
+    });
     if (!asset) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    // 删除本地文件
-    if (asset.localPath) {
-      const absPath = path.join(process.cwd(), "public", asset.localPath.startsWith("/") ? asset.localPath.slice(1) : asset.localPath);
-      if (fs.existsSync(absPath)) fs.unlinkSync(absPath);
-    }
-
+    removePublicUrlIfExists(asset.localPath);
     await prisma.characterAsset.delete({ where: { id: assetId } });
     await syncCharacterAssetStatus(charId);
     return NextResponse.json({ ok: true });
@@ -37,10 +37,22 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string; charId: string; assetId: string }> }
 ) {
   try {
-    const { assetId } = await params;
+    const { id: projectId, charId, assetId } = await params;
+    const existing = await prisma.characterAsset.findFirst({
+      where: {
+        id: assetId,
+        characterId: charId,
+        character: { projectId },
+      },
+      select: { id: true },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
     const body = await req.json();
     const updated = await prisma.characterAsset.update({
-      where: { id: assetId },
+      where: { id: existing.id },
       data: {
         label: body.label,
         assetType: body.assetType ? normalizeCharacterAssetType(body.assetType) : undefined,

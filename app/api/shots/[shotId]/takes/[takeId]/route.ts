@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { normalizeShotStateById } from "@/lib/production-state";
+import { validateTakePatchBody } from "@/lib/route-validation";
 
 export async function PATCH(
   req: NextRequest,
@@ -19,10 +20,11 @@ export async function PATCH(
 ) {
   try {
     const { shotId, takeId } = await params;
-    const body = await req.json() as {
-      isDiscarded?: boolean;
-      discardReason?: string;
-    };
+    const parsed = validateTakePatchBody(await req.json().catch(() => null));
+    if (!parsed.ok) {
+      return parsed.response;
+    }
+    const body = parsed.value;
 
     const take = await prisma.take.findUnique({ where: { id: takeId } });
     if (!take || take.shotId !== shotId) {
@@ -30,6 +32,8 @@ export async function PATCH(
     }
 
     const isDiscarding = body.isDiscarded === true && !take.isDiscarded;
+
+    let shotState: Awaited<ReturnType<typeof normalizeShotStateById>> | null = null;
 
     // 若废弃的是当前 adopted take，清除 take.isAdopted 并清空对应采用字段
     if (isDiscarding && take.isAdopted) {
@@ -51,7 +55,7 @@ export async function PATCH(
         where: { id: shotId },
         data: clearPatch,
       });
-      await normalizeShotStateById(shotId);
+      shotState = await normalizeShotStateById(shotId);
     }
 
     const updated = await prisma.take.update({
@@ -67,6 +71,7 @@ export async function PATCH(
       isDiscarded: updated.isDiscarded,
       isAdopted: updated.isAdopted,
       discardReason: updated.discardReason,
+      ...(shotState ? { shotState } : {}),
     });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

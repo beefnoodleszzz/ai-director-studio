@@ -1,24 +1,47 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { initProjectDirs } from "@/lib/asset";
-import { deriveProjectProgress } from "@/lib/production-state";
+import { validateProjectCreateBody } from "@/lib/route-validation";
+
+const projectCardSelect = {
+  id: true,
+  title: true,
+  type: true,
+  aspect: true,
+  worldSetting: true,
+  era: true,
+  createdAt: true,
+  characters: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
+  episodes: {
+    orderBy: { episodeNum: "asc" as const },
+    select: {
+      id: true,
+      episodeNum: true,
+      title: true,
+      productionStage: true,
+    },
+  },
+  styleBible: {
+    select: {
+      id: true,
+      genreTag: true,
+      visualStyle: true,
+    },
+  },
+};
 
 export async function GET() {
   try {
     const projects = await prisma.project.findMany({
       orderBy: { createdAt: "desc" },
-      include: {
-        characters: { select: { id: true, name: true } },
-        episodes: { orderBy: { episodeNum: "asc" }, select: { id: true, episodeNum: true, title: true, productionStage: true } },
-        styleBible: { select: { id: true, genreTag: true, visualStyle: true } },
-      },
+      select: projectCardSelect,
     });
-    return NextResponse.json(
-      projects.map((project) => ({
-        ...project,
-        progress: deriveProjectProgress(project.episodes),
-      }))
-    );
+    return NextResponse.json(projects);
   } catch (err) {
     console.error("[GET /api/projects]", err);
     return NextResponse.json({ error: "Failed to fetch projects" }, { status: 500 });
@@ -27,35 +50,30 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as {
-      title: string;
-      type?: string;
-      aspect?: string;
-      platform?: string;
-      worldSetting?: string;
-      era?: string;
-    };
-
-    if (!body.title) {
-      return NextResponse.json({ error: "title is required" }, { status: 400 });
+    const parsed = validateProjectCreateBody(await req.json().catch(() => null));
+    if (!parsed.ok) {
+      return parsed.response;
     }
+    const body = parsed.value;
 
     const project = await prisma.project.create({
       data: {
         title: body.title,
         type: body.type ?? "short-drama",
         aspect: body.aspect ?? "9:16",
-        platform: body.platform ?? "",
-        worldSetting: body.worldSetting ?? "",
-        era: body.era ?? "",
-        styleBible: { create: {} },
+        worldSetting: body.worldSetting?.trim() ?? "",
+        era: body.era?.trim() ?? "",
       },
-      include: { styleBible: true, characters: true, episodes: true },
     });
 
     initProjectDirs(project.id);
 
-    return NextResponse.json(project, { status: 201 });
+    const hydratedProject = await prisma.project.findUnique({
+      where: { id: project.id },
+      select: projectCardSelect,
+    });
+
+    return NextResponse.json(hydratedProject, { status: 201 });
   } catch (err) {
     console.error("[POST /api/projects]", err);
     return NextResponse.json({ error: "Failed to create project" }, { status: 500 });

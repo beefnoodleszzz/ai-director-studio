@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { toAbsolutePublicUrl } from "@/lib/asset";
 import { normalizeCharacterAssetType, type CharacterAssetType } from "@/lib/studio-contracts";
 
 type CharacterAssetRecord = {
@@ -91,7 +92,11 @@ function chooseAssetsForCharacter(
   ].filter(Boolean) as CharacterAssetType[];
 
   const selectedAssets = selectedTypes.flatMap((type) => byType.get(type) ?? []).slice(0, 4);
-  const urls = dedupe(selectedAssets.map((asset) => asset.localPath).filter(Boolean));
+  const urls = dedupe(
+    selectedAssets
+      .map((asset) => toAbsolutePublicUrl(asset.localPath))
+      .filter(Boolean)
+  ) as string[];
 
   return {
     referenceAssetUrls: urls,

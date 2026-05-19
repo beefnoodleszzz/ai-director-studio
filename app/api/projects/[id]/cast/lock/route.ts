@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { lockProjectCast } from "@/lib/workflows/story-workflow";
 import { prisma } from "@/lib/prisma";
-import { deriveProjectProgress } from "@/lib/production-state";
+import { validateCastLockBody } from "@/lib/route-validation";
 
 export async function POST(
   req: NextRequest,
@@ -9,16 +9,16 @@ export async function POST(
 ) {
   try {
     const { id: projectId } = await params;
-    const { leadCharacterId } = (await req.json()) as { leadCharacterId: string };
-    if (!leadCharacterId) {
-      return NextResponse.json({ error: "leadCharacterId is required" }, { status: 400 });
+    const parsed = validateCastLockBody(await req.json().catch(() => null));
+    if (!parsed.ok) {
+      return parsed.response;
     }
+    const { leadCharacterId } = parsed.value;
     await lockProjectCast(projectId, leadCharacterId);
 
     const project = await prisma.project.findUnique({
       where: { id: projectId },
       select: {
-        episodes: { select: { id: true, productionStage: true } },
         characters: {
           orderBy: { createdAt: "asc" },
           select: {
@@ -38,7 +38,6 @@ export async function POST(
 
     return NextResponse.json({
       ok: true,
-      progress: deriveProjectProgress(project?.episodes ?? []),
       characters: project?.characters ?? [],
       leadCharacterId: project?.characters.find((character) => character.isLead)?.id ?? null,
     });

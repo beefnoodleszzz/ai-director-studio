@@ -8,6 +8,7 @@ interface StoryStageStripProps {
   hasOutline: boolean;
   hasLead: boolean;
   hasScript: boolean;
+  scriptPassed?: boolean;
 }
 
 const stages = [
@@ -19,7 +20,7 @@ const stages = [
 
 function getStatus(
   stageKey: (typeof stages)[number]["gate"],
-  flags: { hasOutline: boolean; hasLead: boolean; hasScript: boolean }
+  flags: { hasOutline: boolean; hasLead: boolean; hasScript: boolean; scriptPassed: boolean }
 ) {
   if (stageKey === "outline") {
     return flags.hasOutline ? "done" : "current";
@@ -30,9 +31,10 @@ function getStatus(
   }
   if (stageKey === "script") {
     if (!flags.hasLead) return "locked";
-    return flags.hasScript ? "done" : "current";
+    if (!flags.hasScript) return "current";
+    return flags.scriptPassed ? "done" : "current";
   }
-  if (!flags.hasScript) return "locked";
+  if (!flags.hasScript || !flags.scriptPassed) return "locked";
   return "current";
 }
 
@@ -47,8 +49,9 @@ export function StoryStageStrip({
   hasOutline,
   hasLead,
   hasScript,
+  scriptPassed = false,
 }: StoryStageStripProps) {
-  const completedCount = [hasOutline, hasLead, hasScript, currentStage === "breakdown_ready" || currentStage === "production_ready"].filter(Boolean).length;
+  const completedCount = [hasOutline, hasLead, hasScript && scriptPassed, currentStage === "breakdown_ready" || currentStage === "production_ready"].filter(Boolean).length;
 
   return (
     <div className="space-y-4">
@@ -64,7 +67,7 @@ export function StoryStageStrip({
 
       <div className="grid gap-3 md:grid-cols-4">
         {stages.map((stage, index) => {
-          const status = getStatus(stage.gate, { hasOutline, hasLead, hasScript });
+          const status = getStatus(stage.gate, { hasOutline, hasLead, hasScript, scriptPassed });
           const isCurrentStage = currentStage === stage.key;
 
           return (

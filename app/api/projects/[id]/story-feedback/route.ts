@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { CONSISTENCY_TAG_CODES } from "@/lib/qa-tags";
+import { toAbsolutePublicPath } from "@/lib/asset";
 
 export async function GET(
   _req: NextRequest,
@@ -26,7 +27,7 @@ export async function GET(
         include: {
           scene: {
             include: {
-              episode: { select: { episodeNum: true } },
+              episode: { select: { episodeNum: true, scriptMeta: true, title: true } },
             },
           },
           takes: {
@@ -76,8 +77,8 @@ export async function GET(
       if (!record.manifestPath) continue;
       try {
         const fs = await import("fs");
-        const manifestLocal = `${process.cwd()}/public${record.manifestPath.startsWith("/") ? record.manifestPath : `/${record.manifestPath}`}`;
-        if (!fs.existsSync(manifestLocal)) continue;
+        const manifestLocal = toAbsolutePublicPath(record.manifestPath);
+        if (!manifestLocal || !fs.existsSync(manifestLocal)) continue;
         const parsed = JSON.parse(fs.readFileSync(manifestLocal, "utf8")) as {
           preflight?: {
             continuityAudit?: {
@@ -100,6 +101,23 @@ export async function GET(
       }
     }
 
+    const episodeContentIssues = new Map<number, string[]>();
+    for (const shot of shots) {
+      const metaRaw = shot.scene.episode.scriptMeta;
+      if (!metaRaw) continue;
+      try {
+        const meta = JSON.parse(metaRaw) as {
+          contentBlockers?: Array<{ title: string }>;
+        };
+        const blockers = (meta.contentBlockers ?? []).map((item) => item.title).filter(Boolean);
+        if (blockers.length > 0) {
+          episodeContentIssues.set(shot.scene.episode.episodeNum, blockers);
+        }
+      } catch {
+        // noop
+      }
+    }
+
     return NextResponse.json({
       relationshipBlindSpots,
       consistencyIssues: consistencyIssues.slice(0, 8),
@@ -110,9 +128,13 @@ export async function GET(
             ? "优先补齐关系摘要和成长弧线，再继续推进剧本和拆解。"
             : "角色关系基础已具备，可进一步强化冲突热区的压迫感。",
         script:
-          consistencyIssues.length > 0
-            ? "当前剧本可能没有把角色关系和身份锚点压进关键场景，建议重写关键对白与冲突场。"
-            : "剧本层对角色一致性的拖累较少，可优先优化节拍和结尾追更感。",
+          episodeContentIssues.size > 0
+            ? Array.from(episodeContentIssues.entries())
+                .map(([episodeNum, blockers]) => `第 ${episodeNum} 集优先处理：${blockers.join("、")}`)
+                .join("；")
+            : consistencyIssues.length > 0
+              ? "当前剧本可能没有把角色关系和身份锚点压进关键场景，建议重写关键对白与冲突场。"
+              : "剧本层对角色一致性的拖累较少，可优先优化节拍和结尾追更感。",
         breakdown:
           continuityIssues.length > 0
             ? "拆解前请检查本集节拍是否存在跳切过大、情绪承接过弱的段落。"

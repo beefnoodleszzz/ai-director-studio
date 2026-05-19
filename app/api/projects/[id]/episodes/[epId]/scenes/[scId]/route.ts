@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { removePublicUrlIfExists } from "@/lib/asset";
+import { evaluateShotRisk } from "@/lib/shot-risk";
 
 export async function GET(
   _req: NextRequest,
@@ -25,7 +26,17 @@ export async function GET(
       },
     });
     if (!scene) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    return NextResponse.json(scene);
+    return NextResponse.json({
+      ...scene,
+      shots: scene.shots.map((shot) => ({
+        ...shot,
+        risk: evaluateShotRisk({
+          dramaticTag: shot.dramaticTag,
+          adoptedImageTakeId: shot.adoptedImageTakeId,
+          adoptedVideoTakeId: shot.adoptedVideoTakeId,
+        }),
+      })),
+    });
   } catch (err) {
     console.error("[GET scene]", err);
     return NextResponse.json({ error: "Failed" }, { status: 500 });

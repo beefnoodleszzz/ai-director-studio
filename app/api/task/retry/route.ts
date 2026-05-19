@@ -6,11 +6,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cloneTaskForRetry } from "@/lib/task-replayer";
 import { prisma } from "@/lib/prisma";
+import { validateTaskRetryBody } from "@/lib/route-validation";
 
 export async function POST(req: NextRequest) {
   try {
-    const { taskId } = await req.json() as { taskId: string };
-    if (!taskId) return NextResponse.json({ error: "taskId required" }, { status: 400 });
+    const parsed = validateTaskRetryBody(await req.json().catch(() => null));
+    if (!parsed.ok) {
+      return parsed.response;
+    }
+    const { taskId } = parsed.value;
 
     const task = await prisma.generationTask.findUnique({ where: { id: taskId } });
     if (!task) return NextResponse.json({ error: "Task not found" }, { status: 404 });

@@ -65,8 +65,22 @@ export default function CharactersPage({ params }: { params: Promise<{ id: strin
   const handleGenerateAssetPack = async (characterId: string) => {
     setGeneratingAssetCharId(characterId);
     try {
-      await axios.post(`/api/projects/${projectId}/characters/${characterId}/assets/generate`);
-      toast.success("角色资产生成任务已提交");
+      let assetStatus: CharacterAssetStatus | null = null;
+
+      do {
+        const res = await axios.post(`/api/projects/${projectId}/characters/${characterId}/assets/generate`, {
+          limit: 1,
+        });
+        assetStatus = res.data?.assetStatus ?? null;
+
+        if ((res.data?.createdAssets?.length ?? 0) === 0) {
+          break;
+        }
+      } while (assetStatus !== "ready");
+
+      const refreshed = await axios.get<Character[]>(`/api/projects/${projectId}/characters`);
+      setCharacters(refreshed.data);
+      toast.success(assetStatus === "ready" ? "角色资产包已补齐" : "角色资产已生成部分结果");
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status === 404) {
         toast.info("角色资产工厂接口尚未接通，当前先保留触发入口。");

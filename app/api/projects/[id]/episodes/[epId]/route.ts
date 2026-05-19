@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { recalculateEpisodeStage } from "@/lib/production-state";
+import { validateEpisodeUpdateBody } from "@/lib/route-validation";
 
 export async function GET(
   _req: NextRequest,
@@ -42,17 +43,19 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string; epId: string }> }
 ) {
   try {
-    const { epId } = await params;
-    const body = (await req.json()) as Partial<{
-      title: string;
-      summary: string;
-      hook: string;
-      cliffhanger: string;
-      prevLink: string;
-      scriptDraft: string;
-      scriptSource: string;
-      productionStage: string;
-    }>;
+    const { id: projectId, epId } = await params;
+    const parsed = validateEpisodeUpdateBody(await req.json().catch(() => null));
+    if (!parsed.ok) {
+      return parsed.response;
+    }
+    const body = parsed.value;
+    const episodeRecord = await prisma.episode.findFirst({
+      where: { id: epId, projectId },
+      select: { id: true },
+    });
+    if (!episodeRecord) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
     const episode = await prisma.episode.update({ where: { id: epId }, data: body });
     await recalculateEpisodeStage(epId);
     return NextResponse.json(episode);

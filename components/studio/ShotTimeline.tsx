@@ -10,6 +10,13 @@ interface ShotSummary {
   id: string;
   shotOrder: number;
   shotType: string;
+  dramaticTag?: string | null;
+  risk?: {
+    isCritical: boolean;
+    missingVideo: boolean;
+    imageFallbackOnly: boolean;
+    criticalNeedsVideo: boolean;
+  };
   pipelineStage?: string | null;
   exportReadiness?: string | null;
   dialogue: string;
@@ -143,6 +150,7 @@ export function ShotTimeline({
 
             const hasTake = shot.takes.some((t) => t.takeType === "image" && !t.isDiscarded);
             const hasVideo = shot.takes.some((t) => t.takeType === "video" && !t.isDiscarded);
+            const needsCriticalVideo = shot.risk?.criticalNeedsVideo;
 
             return (
               <div
@@ -180,12 +188,16 @@ export function ShotTimeline({
                       {shot.shotOrder.toString().padStart(2, "0")}
                     </p>
                     <p className={cn("text-[9px]", statusConf.color)}>{statusConf.label}</p>
+                    {shot.dramaticTag ? (
+                      <p className="text-[9px] text-muted-foreground">{shot.dramaticTag}</p>
+                    ) : null}
                   </div>
 
                   {/* 媒体类型徽章 */}
                   <div className="flex gap-0.5">
                     {hasTake && <ImageIcon className="size-2.5 text-sky-500" />}
                     {hasVideo && <Film className="size-2.5 text-green-500" />}
+                    {needsCriticalVideo && <AlertTriangle className="size-2.5 text-amber-500" />}
                   </div>
 
                   {/* 拖拽把手 */}

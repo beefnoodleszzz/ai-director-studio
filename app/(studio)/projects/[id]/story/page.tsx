@@ -37,6 +37,7 @@ interface EpisodeLite {
   hook: string;
   cliffhanger: string;
   scriptDraft?: string;
+  scriptMeta?: string;
   productionStage: string;
 }
 
@@ -45,15 +46,9 @@ interface ProjectDetail {
   title: string;
   worldSetting: string;
   era: string;
-  platform: string;
-  forbidRules: string;
   storyOutline: string;
   characters: CharacterLite[];
   episodes: EpisodeLite[];
-  progress?: {
-    currentStage: string;
-    stageCounts: Record<string, number>;
-  };
 }
 
 interface StoryFeedback {
@@ -92,9 +87,14 @@ interface OutlineCharacter {
 
 interface EpisodeBeat {
   episode: string;
+  title?: string;
   beat: string;
   hook: string;
   cliffhanger: string;
+  openingTrigger?: string;
+  pressureSource?: string;
+  escalation?: string;
+  sceneGoal?: string;
 }
 
 interface StoryOutlineShape {
@@ -104,14 +104,24 @@ interface StoryOutlineShape {
   keySuspense: string;
   outlineCharacters: OutlineCharacter[];
   episodeBeats: EpisodeBeat[];
+  blockers?: Array<{ code: string; title: string; detail: string }>;
 }
 
 interface ScriptSections {
   opening: string;
+  openingTrigger: string;
+  immediateCost: string;
+  escalationBeats: string;
+  payoffMoment: string;
   scenePlan: string;
   dialogueMoments: string;
   fullText: string;
+  endingCliffType: string;
   endingHook: string;
+}
+
+interface ScriptMeta {
+  contentBlockers: Array<{ code: string; title: string; detail: string }>;
 }
 
 const EMPTY_OUTLINE: StoryOutlineShape = {
@@ -121,13 +131,19 @@ const EMPTY_OUTLINE: StoryOutlineShape = {
   keySuspense: "",
   outlineCharacters: [],
   episodeBeats: [],
+  blockers: [],
 };
 
 const SCRIPT_SECTION_LABELS = {
   opening: "开场钩子",
+  openingTrigger: "开场异常",
+  immediateCost: "即时代价",
+  escalationBeats: "升级节点",
+  payoffMoment: "兑现时刻",
   scenePlan: "场景推进提纲",
   dialogueMoments: "关键对白与情绪节点",
   fullText: "完整正文",
+  endingCliffType: "悬点类型",
   endingHook: "结尾悬点",
 } as const;
 
@@ -155,9 +171,24 @@ function safeParseOutline(raw: string): StoryOutlineShape {
             const record = (item ?? {}) as Record<string, unknown>;
             return {
               episode: typeof record.episode === "string" ? record.episode : "",
+              title: typeof record.title === "string" ? record.title : "",
               beat: typeof record.beat === "string" ? record.beat : "",
               hook: typeof record.hook === "string" ? record.hook : "",
               cliffhanger: typeof record.cliffhanger === "string" ? record.cliffhanger : "",
+              openingTrigger: typeof record.openingTrigger === "string" ? record.openingTrigger : "",
+              pressureSource: typeof record.pressureSource === "string" ? record.pressureSource : "",
+              escalation: typeof record.escalation === "string" ? record.escalation : "",
+              sceneGoal: typeof record.sceneGoal === "string" ? record.sceneGoal : "",
+            };
+          })
+        : [],
+      blockers: Array.isArray(parsed.blockers)
+        ? parsed.blockers.map((item) => {
+            const record = (item ?? {}) as Record<string, unknown>;
+            return {
+              code: typeof record.code === "string" ? record.code : "unknown",
+              title: typeof record.title === "string" ? record.title : "",
+              detail: typeof record.detail === "string" ? record.detail : "",
             };
           })
         : [],
@@ -175,9 +206,14 @@ function parseScriptSections(text: string): ScriptSections {
   if (!text.trim()) {
     return {
       opening: "",
+      openingTrigger: "",
+      immediateCost: "",
+      escalationBeats: "",
+      payoffMoment: "",
       scenePlan: "",
       dialogueMoments: "",
       fullText: "",
+      endingCliffType: "",
       endingHook: "",
     };
   }
@@ -188,18 +224,28 @@ function parseScriptSections(text: string): ScriptSections {
   if (!hasStructuredHeading) {
     return {
       opening: "",
+      openingTrigger: "",
+      immediateCost: "",
+      escalationBeats: "",
+      payoffMoment: "",
       scenePlan: "",
       dialogueMoments: "",
       fullText: text.trim(),
+      endingCliffType: "",
       endingHook: "",
     };
   }
 
   const sections: ScriptSections = {
     opening: "",
+    openingTrigger: "",
+    immediateCost: "",
+    escalationBeats: "",
+    payoffMoment: "",
     scenePlan: "",
     dialogueMoments: "",
     fullText: "",
+    endingCliffType: "",
     endingHook: "",
   };
 
@@ -226,6 +272,15 @@ function parseScriptSections(text: string): ScriptSections {
   return sections;
 }
 
+function parseScriptMeta(raw?: string) {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as ScriptMeta;
+  } catch {
+    return null;
+  }
+}
+
 function composeScriptDraft(sections: ScriptSections) {
   return (Object.entries(SCRIPT_SECTION_LABELS) as Array<[keyof ScriptSections, string]>)
     .filter(([key]) => sections[key].trim())
@@ -243,6 +298,7 @@ export default function StoryWorkbenchPage({ params }: { params: Promise<{ id: s
   const [selectedEpisodeId, setSelectedEpisodeId] = useState("");
   const [outlineDraft, setOutlineDraft] = useState("");
   const [scriptDraft, setScriptDraft] = useState("");
+  const [scriptMeta, setScriptMeta] = useState<ScriptMeta | null>(null);
   const [leadCharacterId, setLeadCharacterId] = useState("");
   const [castDrafts, setCastDrafts] = useState<Record<string, CharacterLite>>({});
   const [pendingCharacters, setPendingCharacters] = useState<Array<{ name: string; description: string }>>([]);
@@ -267,9 +323,11 @@ export default function StoryWorkbenchPage({ params }: { params: Promise<{ id: s
       const nextEpisode =
         projectRes.data.episodes.find((episode) => episode.id === nextEpisodeId) ?? firstEpisode;
       setScriptDraft(nextEpisode?.scriptDraft || "");
+      setScriptMeta(parseScriptMeta(nextEpisode?.scriptMeta));
     } else {
       setSelectedEpisodeId("");
       setScriptDraft("");
+      setScriptMeta(null);
     }
     setCastDrafts(
       Object.fromEntries(
@@ -284,6 +342,7 @@ export default function StoryWorkbenchPage({ params }: { params: Promise<{ id: s
         ])
       )
     );
+    return projectRes.data;
   }, [projectId]);
 
   if (loading) {
@@ -301,6 +360,7 @@ export default function StoryWorkbenchPage({ params }: { params: Promise<{ id: s
     setSelectedEpisodeId(episodeId);
     const nextEpisode = project?.episodes.find((episode) => episode.id === episodeId) ?? null;
     setScriptDraft(nextEpisode?.scriptDraft || "");
+    setScriptMeta(parseScriptMeta(nextEpisode?.scriptMeta));
   };
 
   const outline = useMemo(() => safeParseOutline(outlineDraft), [outlineDraft]);
@@ -341,6 +401,7 @@ export default function StoryWorkbenchPage({ params }: { params: Promise<{ id: s
   );
 
   const hasScript = Boolean(scriptDraft.trim());
+  const scriptPassed = (scriptMeta?.contentBlockers?.length ?? 0) === 0 && hasScript;
   const pendingCharacterNames = useMemo(() => {
     const raw = searchParams.get("pendingCharacters");
     if (!raw) return [];
@@ -391,15 +452,33 @@ export default function StoryWorkbenchPage({ params }: { params: Promise<{ id: s
         detail: "送入拆解前，至少需要有一版当前剧集的正文确认稿，才能稳定生成场次和镜头。",
       });
     }
+    if (hasScript && (scriptMeta?.contentBlockers?.length ?? 0) > 0) {
+      for (const blocker of scriptMeta?.contentBlockers ?? []) {
+        items.push({
+          title: blocker.title,
+          detail: blocker.detail,
+        });
+      }
+    }
     return items;
-  }, [hasLead, hasOutline, hasScript]);
+  }, [hasLead, hasOutline, hasScript, scriptMeta]);
+
+  const scriptPreflightSummary = useMemo(() => {
+    if (!hasScript) return "先生成或保存当前集剧本，系统才能评估是否允许拆解。";
+    if (!leadCharacterId) return "请先锁定主角，否则拆解时主视角和关系压力会继续漂移。";
+    if ((scriptMeta?.contentBlockers?.length ?? 0) > 0) {
+      return `当前仍有 ${scriptMeta?.contentBlockers.length ?? 0} 个内容阻断项，修完后再送入拆解。`;
+    }
+    return "当前剧本已通过仙侠样板预检，可以送入拆解。";
+  }, [hasScript, leadCharacterId, scriptMeta]);
 
   const nextAction = useMemo(() => {
     if (!hasOutline) return { label: "先生成或补全剧情大纲", target: "outline-section" };
     if (!hasLead) return { label: "生成角色并锁定主角", target: "cast-section" };
     if (!hasScript) return { label: "生成当前剧集的剧本正文", target: "script-section" };
+    if (!scriptPassed) return { label: "先处理当前剧本的内容阻断项", target: "script-section" };
     return { label: "检查当前剧本后送入拆解", target: "script-section" };
-  }, [hasLead, hasOutline, hasScript]);
+  }, [hasLead, hasOutline, hasScript, scriptPassed]);
 
   const updateOutline = (next: StoryOutlineShape) => {
     setOutlineDraft(stringifyOutline(next));
@@ -471,6 +550,41 @@ export default function StoryWorkbenchPage({ params }: { params: Promise<{ id: s
     }
   };
 
+  const handleGenerateCastWithAssets = async () => {
+    setWorking("cast-assets");
+    try {
+      const res = await axios.post(`/api/projects/${projectId}/cast/generate`);
+      if (res.data?.leadCharacterId) {
+        setLeadCharacterId(res.data.leadCharacterId);
+      }
+
+      const refreshedProject = await loadProject();
+      const characters = refreshedProject.characters ?? [];
+
+      for (const character of characters) {
+        let assetStatus: string | null = null;
+
+        do {
+          const assetRes = await axios.post(`/api/projects/${projectId}/characters/${character.id}/assets/generate`, {
+            limit: 1,
+          });
+          assetStatus = assetRes.data?.assetStatus ?? null;
+
+          if ((assetRes.data?.createdAssets?.length ?? 0) === 0) {
+            break;
+          }
+        } while (assetStatus !== "ready");
+      }
+
+      await loadProject();
+      toast.success("角色与核心资产包生成完成");
+    } catch {
+      toast.error("角色或资产生成失败");
+    } finally {
+      setWorking(null);
+    }
+  };
+
   const handleCastFieldChange = (characterId: string, field: keyof CharacterLite, value: string) => {
     setCastDrafts((prev) => ({
       ...prev,
@@ -536,8 +650,13 @@ export default function StoryWorkbenchPage({ params }: { params: Promise<{ id: s
     try {
       const res = await axios.post(`/api/projects/${projectId}/episodes/${selectedEpisodeId}/script/generate`);
       setScriptDraft(res.data.scriptDraft ?? "");
+      setScriptMeta(res.data.scriptMeta ?? null);
       await loadProject();
-      toast.success("剧本正文生成完成");
+      if ((res.data.blockers?.length ?? 0) > 0) {
+        toast.warning(`剧本已生成，但仍有 ${res.data.blockers.length} 个内容阻断项需要处理`);
+      } else {
+        toast.success("剧本正文生成完成");
+      }
     } catch {
       toast.error("剧本生成失败");
     } finally {
@@ -549,12 +668,19 @@ export default function StoryWorkbenchPage({ params }: { params: Promise<{ id: s
     if (!selectedEpisodeId) return;
     setWorking("save-script");
     try {
-      await axios.patch(`/api/projects/${projectId}/episodes/${selectedEpisodeId}/script`, {
+      const res = await axios.patch(`/api/projects/${projectId}/episodes/${selectedEpisodeId}/script`, {
         scriptDraft,
+        scriptMeta: scriptMeta ? JSON.stringify(scriptMeta) : undefined,
         scriptSource: "manual",
       });
+      setScriptDraft(res.data.scriptDraft ?? scriptDraft);
+      setScriptMeta(res.data.scriptMeta ?? null);
       await loadProject();
-      toast.success("剧本正文已保存");
+      if ((res.data.blockers?.length ?? 0) > 0) {
+        toast.warning(`剧本已保存，但仍有 ${res.data.blockers.length} 个内容阻断项`);
+      } else {
+        toast.success("剧本正文已保存");
+      }
     } catch {
       toast.error("剧本保存失败");
     } finally {
@@ -579,6 +705,10 @@ export default function StoryWorkbenchPage({ params }: { params: Promise<{ id: s
         setPendingCharacters(res.data.newCharacters ?? []);
         setPendingBreakdownData(res.data.pendingData ?? null);
         toast.warning(`拆解发现 ${res.data.newCharacters?.length ?? 0} 个新重要角色，请先确认角色后再继续`);
+      } else if (res.data.status === "NEEDS_REVISION") {
+        setPendingCharacters([]);
+        setPendingBreakdownData(null);
+        toast.error(res.data.blockers?.[0]?.title ?? "当前剧本还不满足拆解标准");
       } else {
         setPendingCharacters([]);
         setPendingBreakdownData(null);
@@ -653,6 +783,7 @@ export default function StoryWorkbenchPage({ params }: { params: Promise<{ id: s
             hasOutline={hasOutline}
             hasLead={hasLead}
             hasScript={hasScript}
+            scriptPassed={scriptPassed}
           />
           <div className="flex flex-wrap gap-2">
             <Link href="./characters">
@@ -672,6 +803,7 @@ export default function StoryWorkbenchPage({ params }: { params: Promise<{ id: s
         hasOutline={hasOutline}
         hasLead={hasLead}
         hasScript={hasScript}
+        scriptPassed={scriptPassed}
       />
 
       {storyFeedback ? (
@@ -816,6 +948,7 @@ export default function StoryWorkbenchPage({ params }: { params: Promise<{ id: s
         pendingCharacters={pendingCharacters}
         onLeadChange={setLeadCharacterId}
         onGenerate={handleGenerateCast}
+        onGenerateWithAssets={handleGenerateCastWithAssets}
         onSave={handleSaveCast}
         onLockLead={handleLockLead}
         onFieldChange={handleCastFieldChange}
@@ -832,6 +965,9 @@ export default function StoryWorkbenchPage({ params }: { params: Promise<{ id: s
         leadLocked={hasLead}
         dialogueGuidance={relationshipGuidance}
         voiceStyleHints={voiceStyleHints}
+        contentBlockers={scriptMeta?.contentBlockers ?? []}
+        preflightReady={scriptPassed}
+        preflightSummary={scriptPreflightSummary}
         working={working}
         onEpisodeChange={handleEpisodeChange}
         onSectionChange={handleStructuredScriptChange}

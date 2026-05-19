@@ -42,6 +42,9 @@ yarn-error.log*
 *.db
 *.db-journal
 
+# local runtime workspace
+/workspace/
+
 # vercel
 .vercel
 

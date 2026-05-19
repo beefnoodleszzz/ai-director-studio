@@ -24,6 +24,7 @@ import { formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { MediaPreview } from "@/components/studio/MediaPreview";
 import { type BlockMeta } from "@/lib/studio-contracts";
+import { type TaskEvent } from "@/lib/task-queue";
 
 type TaskStatus = "queued" | "running" | "retrying" | "paused" | "failed" | "completed" | "cancelled";
 
@@ -43,6 +44,7 @@ interface Task {
   createdAt: string;
   inputRef: string;
   outputRef: string;
+  events?: TaskEvent[];
 }
 
 interface QueueStats {
@@ -93,7 +95,7 @@ function TaskRow({ task, onCancel, onRetry, onDelete }: TaskRowProps) {
   const statusInfo = statusConfig[task.status] ?? statusConfig.queued;
   const StatusIcon = statusInfo.icon;
 
-  const logLines = task.logs ? task.logs.split("\n").filter(Boolean) : [];
+  const events = task.events ?? [];
   const isActive = task.status === "running" || task.status === "retrying";
   const isBlocked = Boolean(task.blockMeta || task.blockReason);
   const blockLabel =
@@ -192,7 +194,7 @@ function TaskRow({ task, onCancel, onRetry, onDelete }: TaskRowProps) {
               <XCircle className="size-3.5 text-destructive" />
             </Button>
           )}
-          {logLines.length > 0 ? (
+          {events.length > 0 ? (
             <ChevronDown className={cn("size-3.5 text-muted-foreground transition-transform", expanded && "rotate-180")} />
           ) : (
             <ChevronRight className="size-3.5 text-muted-foreground opacity-0" />
@@ -230,10 +232,27 @@ function TaskRow({ task, onCancel, onRetry, onDelete }: TaskRowProps) {
                 </div>
               </div>
             )}
-            {logLines.length > 0 ? (
-              <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-xl border bg-background p-3 font-mono text-xs leading-relaxed text-muted-foreground">
-                {logLines.slice(-20).join("\n")}
-              </pre>
+            {events.length > 0 ? (
+              <div className="max-h-64 space-y-2 overflow-y-auto rounded-xl border bg-background p-3">
+                {events.slice(-12).reverse().map((event, index) => (
+                  <div key={`${event.timestamp}-${index}`} className="rounded-lg border border-border/60 px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <Badge variant="outline" className="px-1.5 py-0 text-[10px] uppercase">
+                        {event.type}
+                      </Badge>
+                      <span className="font-mono text-[10px] text-muted-foreground">
+                        {new Date(event.timestamp).toLocaleString("zh-CN")}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-foreground">{event.message}</p>
+                    {event.details ? (
+                      <pre className="mt-2 overflow-x-auto whitespace-pre-wrap font-mono text-[10px] leading-relaxed text-muted-foreground">
+                        {JSON.stringify(event.details, null, 2)}
+                      </pre>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
             ) : (
               <div className="rounded-xl border bg-background p-3 text-xs text-muted-foreground">
                 暂无日志

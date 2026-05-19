@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { removePublicUrlIfExists } from "@/lib/asset";
+import { removePublicUrlIfExists, toAbsolutePublicPath } from "@/lib/asset";
 import fs from "fs";
+import { parseProjectExportsDeleteQueryParams } from "@/lib/route-validation";
 
 export async function GET(
   _req: NextRequest,
@@ -18,8 +19,8 @@ export async function GET(
       let preflight: Record<string, unknown> | null = null;
       if (record.manifestPath) {
         try {
-          const manifestLocal = `${process.cwd()}/public${record.manifestPath.startsWith("/") ? record.manifestPath : `/${record.manifestPath}`}`;
-          if (fs.existsSync(manifestLocal)) {
+          const manifestLocal = toAbsolutePublicPath(record.manifestPath);
+          if (manifestLocal && fs.existsSync(manifestLocal)) {
             const parsed = JSON.parse(fs.readFileSync(manifestLocal, "utf8")) as { preflight?: Record<string, unknown> };
             preflight = parsed.preflight ?? null;
           }
@@ -42,13 +43,12 @@ export async function DELETE(
 ) {
   try {
     const { id: projectId } = await params;
-    const { searchParams } = new URL(req.url);
-    const exportId = searchParams.get("exportId");
-    const deleteFiles = searchParams.get("deleteFiles") === "true";
-
-    if (!exportId) {
-      return NextResponse.json({ error: "exportId required" }, { status: 400 });
+    const parsed = parseProjectExportsDeleteQueryParams(req.url);
+    if (!parsed.ok) {
+      return parsed.response;
     }
+
+    const { exportId, deleteFiles } = parsed.value;
 
     const record = await prisma.exportRecord.findFirst({
       where: { id: exportId, projectId },

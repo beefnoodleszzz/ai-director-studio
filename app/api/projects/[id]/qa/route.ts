@@ -1,25 +1,48 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import {
+  jsonError,
+  parseProjectQaQueryParams,
+  validateQaReviewPatchBody,
+} from "@/lib/route-validation";
 
 export async function PATCH(
-  req: NextRequest
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const body = await req.json() as {
-      reviewId: string;
-      verdict?: string;
-      suggestion?: string;
-      details?: string;
-    };
+    const { id: projectId } = await params;
+    const parsed = validateQaReviewPatchBody(await req.json().catch(() => null));
+    if (!parsed.ok) {
+      return parsed.response;
+    }
+    const body = parsed.value;
 
-    if (!body.reviewId) return NextResponse.json({ error: "reviewId required" }, { status: 400 });
+    const review = await prisma.review.findFirst({
+      where: {
+        id: body.reviewId,
+        take: {
+          shot: {
+            scene: {
+              episode: {
+                projectId,
+              },
+            },
+          },
+        },
+      },
+      select: { id: true },
+    });
+    if (!review) {
+      return jsonError(404, "review_not_found", "Review was not found for the current project");
+    }
 
     const updated = await prisma.review.update({
       where: { id: body.reviewId },
       data: {
-        ...(body.verdict ? { verdict: body.verdict } : {}),
-        ...(body.suggestion ? { suggestion: body.suggestion } : {}),
-        ...(body.details ? { details: body.details } : {}),
+        ...(body.verdict !== undefined ? { verdict: body.verdict } : {}),
+        ...(body.suggestion !== undefined ? { suggestion: body.suggestion } : {}),
+        ...(body.details !== undefined ? { details: body.details } : {}),
       },
     });
 
@@ -35,9 +58,12 @@ export async function GET(
 ) {
   try {
     const { id: projectId } = await params;
-    const { searchParams } = new URL(req.url);
-    const episodeId = searchParams.get("episodeId");
+    const parsed = parseProjectQaQueryParams(req.url);
+    if (!parsed.ok) {
+      return parsed.response;
+    }
 
+    const { episodeId } = parsed.value;
 
     const scenes = await prisma.scene.findMany({
       where: {
@@ -61,14 +87,10 @@ export async function GET(
       },
     });
 
-    // 展平为 QA item 列表（携带完整路由上下文供前端重做）
     const qaItems = [];
     for (const scene of scenes) {
       for (const shot of scene.shots) {
-        // 找到当前采用的 image take（供视频重做使用）
-        const adoptedImageTake = shot.takes.find(
-          (t) => t.isAdopted && t.takeType === "image"
-        );
+        const adoptedImageTake = shot.takes.find((t) => t.isAdopted && t.takeType === "image");
         for (const take of shot.takes) {
           const latestReview = take.reviews[0];
           if (!latestReview) continue;
@@ -79,14 +101,14 @@ export async function GET(
             paramsSnapshot = null;
           }
           qaItems.push({
-            // 路由上下文（供重做时构建 API 参数）
             projectId,
             episodeId: scene.episode.id,
             sceneId: scene.id,
             shotId: shot.id,
             adoptedImageTakeId: adoptedImageTake?.id ?? null,
             visualPrompt: shot.visualPrompt,
-            // 展示字段
+            audioPrompt: shot.audioPrompt,
+            dialogue: shot.dialogue,
             shotOrder: shot.shotOrder,
             shotType: shot.shotType,
             sceneOrder: scene.sceneOrder,

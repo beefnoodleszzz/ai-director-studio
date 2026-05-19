@@ -8,7 +8,7 @@
 export interface QATag {
   code: string;
   label: string;
-  category: "image" | "video" | "audio" | "common";
+  category: "image" | "video" | "audio" | "common" | "content";
   severity: "minor" | "major" | "critical";
   /** 是否与角色一致性相关（供 consistency report 消费） */
   isConsistencyTag?: boolean;
@@ -53,6 +53,15 @@ export const QA_TAGS: QATag[] = [
   { code: "noise", label: "背景噪音", category: "audio", severity: "minor" },
   { code: "cut-off", label: "对白截断", category: "audio", severity: "critical" },
   { code: "wrong-emotion", label: "情绪不符", category: "audio", severity: "minor" },
+
+  // ── 内容结构 ──
+  { code: "weak-hook", label: "开场钩子不足", category: "content", severity: "critical" },
+  { code: "unclear-goal", label: "主角目标不清", category: "content", severity: "major" },
+  { code: "flat-escalation", label: "升级不足", category: "content", severity: "major" },
+  { code: "weak-payoff", label: "反击兑现不足", category: "content", severity: "major" },
+  { code: "weak-cliffhanger", label: "追更悬念不足", category: "content", severity: "critical" },
+  { code: "dialogue-too-expository", label: "对白解释感过强", category: "content", severity: "minor" },
+  { code: "villain-pressure-insufficient", label: "压迫感不足", category: "content", severity: "major" },
 ];
 
 /** 所有与角色一致性相关的标签 codes */

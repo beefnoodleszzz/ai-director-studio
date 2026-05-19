@@ -7,6 +7,20 @@ import axios from "axios";
 import { toast } from "sonner";
 import { ProjectPageShell } from "@/components/studio/ProjectPageShell";
 
+const EMPTY_STYLE_BIBLE: StyleBibleData = {
+  projectId: "",
+  genreTag: "",
+  visualStyle: "",
+  colorStrategy: "",
+  shotPreference: "",
+  imageDensity: "",
+  eraAesthetic: "",
+  setConstraints: "",
+  propConstraints: "",
+  negativeKeywords: "",
+  mangaLayoutStyle: "",
+};
+
 export default function StyleBiblePage({ params }: { params: Promise<{ id: string }> }) {
   const { id: projectId } = use(params);
   const [styleBible, setStyleBible] = useState<StyleBibleData | null>(null);
@@ -14,12 +28,12 @@ export default function StyleBiblePage({ params }: { params: Promise<{ id: strin
 
   useEffect(() => {
     axios
-      .get(`/api/projects/${projectId}`)
+      .get<StyleBibleData | null>(`/api/projects/${projectId}/style-bible`)
       .then((res) => {
-        if (res.data.styleBible) {
-          setStyleBible({ ...res.data.styleBible, projectId });
+        if (res.data) {
+          setStyleBible({ ...res.data, projectId });
         } else {
-          setStyleBible({ projectId, genreTag: "", visualStyle: "", colorStrategy: "", shotPreference: "", imageDensity: "", eraAesthetic: "", setConstraints: "", propConstraints: "", negativeKeywords: "", mangaLayoutStyle: "" });
+          setStyleBible({ ...EMPTY_STYLE_BIBLE, projectId });
         }
       })
       .catch(() => toast.error("加载失败"))

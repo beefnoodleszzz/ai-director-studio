@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E '/api/|/\\\\\\(studio\\\\\\)/|page\\\\.tsx$|route\\\\.ts$|route\\\\.js$|route\\\\.tsx$')",
+      "Bash(grep 'docs/project-status-and-vision\\\\.md$')",
+      "Bash(grep -E '\\(^|/\\)\\(tests?|__tests__|specs?\\)/|\\\\.\\(test|spec\\)\\\\.\\(ts|tsx|js|jsx\\)$')",
+      "Bash(grep 'project-status-and-vision\\\\.md$')",
+      "Bash(grep -E '\\(^|/\\)\\(test|tests|__tests__|specs?\\)/|\\\\.\\(test|spec\\)\\\\.\\(ts|tsx|js|jsx\\)$')",
+      "Bash(xargs -I{} sh -c 'printf \"%s\\\\n\" \"{}\"; grep -RIn \"describe\\\\|it\\(\\\\|test\\(\\\\|expect\\(\" \"{}\" | head -n 20')"
+    ]
+  }
+}

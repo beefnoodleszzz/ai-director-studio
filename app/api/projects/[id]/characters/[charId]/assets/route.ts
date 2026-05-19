@@ -1,13 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import path from "path";
-import fs from "fs";
 import { prisma } from "@/lib/prisma";
 import { generateId } from "@/lib/utils";
+import { saveBufferToCharacterAsset } from "@/lib/asset";
 import {
   normalizeCharacterAssetRecord,
   syncCharacterAssetStatus,
 } from "@/lib/workflows/character-assets";
 import { normalizeCharacterAssetType } from "@/lib/studio-contracts";
+import { jsonError, validateCharacterAssetUpload } from "@/lib/route-validation";
+
+function mapAssetTypeToFolder(assetType: string): "refs" | "angles" | "expressions" | "wardrobe" {
+  if (assetType === "reference-main") return "refs";
+  if (assetType.startsWith("angle-")) return "angles";
+  if (assetType.startsWith("expression-")) return "expressions";
+  return "wardrobe";
+}
 
 export async function GET(
   _req: NextRequest,
@@ -42,30 +49,44 @@ export async function POST(
       try { tags.push(...JSON.parse(tagsRaw)); } catch { /* noop */ }
     }
 
-    if (!file) {
-      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+    const character = await prisma.characterBible.findFirst({
+      where: {
+        id: charId,
+        projectId,
+      },
+      select: { id: true },
+    });
+    if (!character) {
+      return jsonError(404, "character_not_found", "Character was not found for the provided project");
     }
 
-    const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+    if (!file) {
+      return jsonError(400, "missing_file", "No file uploaded");
+    }
+
+    const validatedFile = await validateCharacterAssetUpload(file);
+    if (!validatedFile.ok) {
+      return validatedFile.response;
+    }
+
+    const { extension: ext, buffer } = validatedFile.value;
     const assetId = generateId();
     const filename = `${assetId}.${ext}`;
-
-    // 存储到 public/assets/projects/{projectId}/characters/{charId}/
-    const dir = path.join(process.cwd(), "public", "assets", "projects", projectId, "characters", charId);
-    fs.mkdirSync(dir, { recursive: true });
-
-    const filepath = path.join(dir, filename);
-    const buffer = Buffer.from(await file.arrayBuffer());
-    fs.writeFileSync(filepath, buffer);
-
-    const localUrl = `/assets/projects/${projectId}/characters/${charId}/${filename}`;
+    const saved = saveBufferToCharacterAsset(
+      buffer,
+      projectId,
+      charId,
+      mapAssetTypeToFolder(assetType),
+      filename
+    );
 
     const asset = await prisma.characterAsset.create({
       data: {
         id: assetId,
         characterId: charId,
         assetType,
-        localPath: localUrl,
+        localPath: saved.url,
+        url: saved.url,
         label,
         tags: JSON.stringify(tags),
       },

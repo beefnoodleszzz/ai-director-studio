@@ -14,7 +14,16 @@ interface SceneDetail {
   location: string;
   timeOfDay: string;
   summary: string;
-  shots: unknown[];
+  shots: Array<{
+    id: string;
+    dramaticTag?: string | null;
+    risk?: {
+      isCritical: boolean;
+      missingVideo: boolean;
+      imageFallbackOnly: boolean;
+      criticalNeedsVideo: boolean;
+    };
+  }>;
 }
 
 export default function SceneWorkbenchPage({
@@ -41,10 +50,19 @@ export default function SceneWorkbenchPage({
   if (loading) return <div className="app-page py-16 flex justify-center"><Loader2 className="size-8 animate-spin text-muted-foreground" /></div>;
   if (!scene) return <div className="app-page py-8 text-center text-muted-foreground">场次不存在</div>;
 
+  const criticalShots = scene.shots.filter((shot) => shot.risk?.isCritical).length;
+  const criticalVideoRisks = scene.shots.filter((shot) => shot.risk?.criticalNeedsVideo).length;
+
   return (
     <ProjectPageShell
       title={`镜头工作台 · SC${scene.sceneOrder.toString().padStart(2, "0")}`}
-      description={[scene.location, scene.timeOfDay, scene.summary].filter(Boolean).join(" · ") || "在这里完成镜头生成、对比、采用与细节修正。"}
+      description={[
+        scene.location,
+        scene.timeOfDay,
+        scene.summary,
+        criticalShots > 0 ? `${criticalShots} 个关键镜头` : "",
+        criticalVideoRisks > 0 ? `${criticalVideoRisks} 个关键镜头待视频化` : "",
+      ].filter(Boolean).join(" · ") || "在这里完成镜头生成、对比、采用与细节修正。"}
       backHref={`/projects/${projectId}/episodes/${epId}`}
       stickyHeader
     >

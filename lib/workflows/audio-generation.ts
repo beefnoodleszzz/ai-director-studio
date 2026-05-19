@@ -12,7 +12,7 @@ import fs from "fs";
 import axios from "axios";
 import { prisma } from "@/lib/prisma";
 import { downloadToTake, saveTakeInputJson, initTakeDirs } from "@/lib/asset";
-import { enqueueTask } from "@/lib/task-queue";
+import { dispatchTask } from "@/lib/task-queue";
 import { generateId } from "@/lib/utils";
 import { normalizeShotStateById, recalculateEpisodeStage } from "@/lib/production-state";
 import type { AudioGenInput } from "./types";
@@ -272,7 +272,7 @@ export async function generateShotSFX(
 // ─── 含任务追踪的包装入口 ─────────────────────────────────────────────────────
 
 export async function generateShotAudioWithTask(input: AudioGenInput) {
-  return enqueueTask(
+  return dispatchTask(
     {
       projectId: input.projectId,
       shotId: input.shotId,

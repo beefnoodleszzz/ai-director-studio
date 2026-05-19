@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { recalculateEpisodeStage } from "@/lib/production-state";
+import { validateOutlinePatchBody } from "@/lib/route-validation";
 
 export async function PATCH(
   req: NextRequest,
@@ -8,7 +9,11 @@ export async function PATCH(
 ) {
   try {
     const { id: projectId } = await params;
-    const body = (await req.json()) as { storyOutline: unknown };
+    const parsed = validateOutlinePatchBody(await req.json().catch(() => null));
+    if (!parsed.ok) {
+      return parsed.response;
+    }
+    const body = parsed.value;
 
     const updated = await prisma.project.update({
       where: { id: projectId },

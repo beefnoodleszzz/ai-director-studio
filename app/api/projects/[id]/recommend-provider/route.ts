@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recommendProvider } from "@/lib/provider-recommender";
+import { parseProjectRecommendProviderQueryParams } from "@/lib/route-validation";
 
 export async function GET(
   req: NextRequest,
@@ -7,9 +8,12 @@ export async function GET(
 ) {
   try {
     const { id: projectId } = await params;
-    const { searchParams } = new URL(req.url);
-    const takeType = searchParams.get("takeType") ?? "image";
-    const fallback = searchParams.get("fallback") ?? "seedream";
+    const parsed = parseProjectRecommendProviderQueryParams(req.url);
+    if (!parsed.ok) {
+      return parsed.response;
+    }
+
+    const { takeType, fallback } = parsed.value;
 
     const result = await recommendProvider(projectId, takeType, fallback);
     return NextResponse.json(result);

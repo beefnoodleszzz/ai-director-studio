@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
+import { pollTaskUntilSettled } from "@/lib/task-client";
 import { cn } from "@/lib/utils";
 import { MediaPreview } from "@/components/studio/MediaPreview";
 
@@ -38,6 +39,8 @@ interface QAItem {
   adoptedImageTakeId: string | null;
   adoptedVideoTakeId?: string | null;
   visualPrompt: string;
+  audioPrompt: string;
+  dialogue: string;
   // 展示字段
   shotOrder: number;
   shotType: string;
@@ -129,8 +132,9 @@ export function QAPanel({ projectId, episodeId }: Props) {
   const handleRetry = async (item: QAItem) => {
     setRetrying((prev) => new Set(prev).add(item.take.id));
     try {
+      let taskId = "";
       if (item.take.takeType === "image") {
-        await axios.post("/api/generate/image", {
+        const res = await axios.post<{ taskId: string }>("/api/generate/image", {
           projectId: item.projectId,
           episodeId: item.episodeId,
           sceneId: item.sceneId,
@@ -138,12 +142,13 @@ export function QAPanel({ projectId, episodeId }: Props) {
           provider: item.take.provider,
           candidateCount: 1,
         });
+        taskId = res.data.taskId;
       } else if (item.take.takeType === "video") {
         if (!item.adoptedImageTakeId) {
           toast.error("该镜头没有已采用的图片 take，无法生成视频");
           return;
         }
-        await axios.post("/api/generate/video", {
+        const res = await axios.post<{ taskId: string }>("/api/generate/video", {
           projectId: item.projectId,
           episodeId: item.episodeId,
           sceneId: item.sceneId,
@@ -152,17 +157,28 @@ export function QAPanel({ projectId, episodeId }: Props) {
           visualPrompt: item.visualPrompt,
           provider: item.take.provider,
         });
+        taskId = res.data.taskId;
       } else if (item.take.takeType === "audio") {
-        await axios.post("/api/generate/audio", {
+        const res = await axios.post<{ taskId: string }>("/api/generate/audio", {
           projectId: item.projectId,
           episodeId: item.episodeId,
           sceneId: item.sceneId,
           shotId: item.shotId,
+          dialogue: item.dialogue,
+          audioPrompt: item.audioPrompt,
           provider: item.take.provider,
         });
+        taskId = res.data.taskId;
       }
       toast.success("已加入重新生成队列");
       fetchQAItems();
+      if (taskId) {
+        void pollTaskUntilSettled(taskId)
+          .then(() => fetchQAItems())
+          .catch(() => {
+            // 静默失败，任务中心仍会展示最新状态
+          });
+      }
     } catch {
       toast.error("重新生成失败");
     } finally {

@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import path from "path";
 import fs from "fs";
 import { prisma } from "@/lib/prisma";
-import { paths, initExportDirs } from "@/lib/asset";
+import { paths, initExportDirs, getLocalPath, WORKSPACE_URL_PREFIX, WORKSPACE_PUBLIC_DIR } from "@/lib/asset";
 import { MANGA_TEMPLATES } from "@/lib/manga/templates";
 import { assignShotsToPages } from "@/lib/manga/layout-engine";
 import { renderMangaPages, mergePagesToLongStrip } from "@/lib/manga/export";
@@ -81,11 +81,7 @@ export async function POST(req: NextRequest) {
         if (!adoptedTake?.localImage) continue;
 
         // 从 URL 转换为绝对路径
-        const imagePath = path.join(
-          process.cwd(),
-          "public",
-          adoptedTake.localImage.startsWith("/") ? adoptedTake.localImage.slice(1) : adoptedTake.localImage
-        );
+        const imagePath = getLocalPath(adoptedTake.localImage);
 
         // 取第一个主体角色名
         const subjectIds: string[] = shot.subjectCharIds
@@ -133,7 +129,7 @@ export async function POST(req: NextRequest) {
     }
 
     const relativeLongStripPath = longStripPath
-      ? "/" + path.relative(path.join(process.cwd(), "public"), longStripPath).replace(/\\/g, "/")
+      ? `${WORKSPACE_URL_PREFIX}/${path.relative(WORKSPACE_PUBLIC_DIR, longStripPath).replace(/\\/g, "/")}`
       : null;
 
     // manifest
@@ -148,13 +144,13 @@ export async function POST(req: NextRequest) {
       longStripPath: relativeLongStripPath,
       pages: pageResults.map((p) => ({
         pageIndex: p.pageIndex,
-        path: "/" + path.relative(path.join(process.cwd(), "public"), p.outputPath).replace(/\\/g, "/"),
+        path: `${WORKSPACE_URL_PREFIX}/${path.relative(WORKSPACE_PUBLIC_DIR, p.outputPath).replace(/\\/g, "/")}`,
       })),
     };
 
     const manifestPath = path.join(pageOutputDir, "manifest.json");
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
-    const relativeManifestPath = "/" + path.relative(path.join(process.cwd(), "public"), manifestPath).replace(/\\/g, "/");
+    const relativeManifestPath = `${WORKSPACE_URL_PREFIX}/${path.relative(WORKSPACE_PUBLIC_DIR, manifestPath).replace(/\\/g, "/")}`;
 
     // 写入 ExportRecord
     const record = await prisma.exportRecord.create({

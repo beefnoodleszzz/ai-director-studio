@@ -16,7 +16,7 @@ import {
   saveTakeInputJson,
   initTakeDirs,
 } from "@/lib/asset";
-import { enqueueTask, getCurrentTaskId } from "@/lib/task-queue";
+import { dispatchTask, getCurrentTaskId } from "@/lib/task-queue";
 import { generateId } from "@/lib/utils";
 import { recommendProvider } from "@/lib/provider-recommender";
 import { normalizeShotStateById, recalculateEpisodeStage } from "@/lib/production-state";
@@ -26,51 +26,43 @@ import { generateShotVideoWithTask } from "./video-generation";
 import { selectCharacterAssetsForShot } from "@/lib/character-asset-selector";
 import { findTag } from "@/lib/qa-tags";
 import { deriveRetryStrategyFromFailTags } from "@/lib/retry-strategy";
+import {
+  DEFAULT_IMAGE_PROVIDER,
+  buildImageGenerationBody,
+  extractGeneratedImage,
+  resolveImageProviderConfig,
+  resolveImageRequestTimeoutMs,
+} from "@/lib/image-api";
 
 // ─── Provider 抽象 ────────────────────────────────────────────────────────────
 
 interface ImageProvider {
   name: string;
-  generate(prompt: string, refImageUrls?: string[]): Promise<{ imageUrl: string; base64?: string }>;
+  generate(
+    prompt: string,
+    refImageUrls?: string[],
+    options?: { aspectRatio?: string; negativePrompt?: string }
+  ): Promise<{ imageUrl: string; base64?: string }>;
 }
 
-function isVolcengineArkBaseUrl(baseUrl: string) {
-  return baseUrl.includes("volces.com") || baseUrl.includes("ark.cn-beijing");
-}
+class SakuraImageProvider implements ImageProvider {
+  name = DEFAULT_IMAGE_PROVIDER;
 
-class SeedreamProvider implements ImageProvider {
-  name = "seedream";
+  async generate(
+    prompt: string,
+    _refImageUrls?: string[],
+    options?: { aspectRatio?: string; negativePrompt?: string }
+  ) {
+    const { apiKey, baseUrl } = resolveImageProviderConfig();
+    if (!apiKey) throw new Error("IMAGE_API_KEY is not configured");
 
-  async generate(prompt: string, refImageUrls?: string[]) {
-    const apiKey = process.env.SEEDREAM_API_KEY;
-    const baseUrl = process.env.SEEDREAM_BASE_URL ?? "https://api.seedream.io/v1";
-    if (!apiKey) throw new Error("SEEDREAM_API_KEY is not configured");
-
-    const isArk = isVolcengineArkBaseUrl(baseUrl);
-    const body: Record<string, unknown> = { prompt, aspect_ratio: "16:9" };
-
-    // 火山方舟 /images/generations 要求 model；见文档「图片生成（Seedream 系列）」
-    if (isArk) {
-      const model = process.env.IMAGE_MODEL ?? process.env.SEEDREAM_MODEL;
-      if (!model) {
-        throw new Error(
-          "使用火山方舟地址时必须在环境变量中配置 IMAGE_MODEL（或 SEEDREAM_MODEL），例如 doubao-seedream-4.5"
-        );
-      }
-      body.model = model;
-      body.response_format = "url";
-      if (refImageUrls && refImageUrls.length > 0) {
-        body.image = refImageUrls.length === 1 ? refImageUrls[0] : refImageUrls;
-      }
-    } else if (refImageUrls && refImageUrls.length > 0) {
-      body.image_url = refImageUrls[0];
-    }
+    const body = buildImageGenerationBody(prompt, options);
 
     let response;
     try {
       response = await axios.post(`${baseUrl}/images/generations`, body, {
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        timeout: 120_000,
+        timeout: resolveImageRequestTimeoutMs(),
       });
     } catch (e) {
       if (axios.isAxiosError(e) && e.response) {
@@ -80,28 +72,24 @@ class SeedreamProvider implements ImageProvider {
             : String(e.response.data);
         const code = e.response.headers["x-error-code"] ?? e.response.headers["x-request-id"];
         throw new Error(
-          `Seedream HTTP ${e.response.status}${code ? ` (${String(code)})` : ""}: ${detail}`
+          `Sakura image API HTTP ${e.response.status}${code ? ` (${String(code)})` : ""}: ${detail}`
         );
       }
       throw e;
     }
 
-    const imageUrl: string =
-      response.data?.data?.[0]?.url ??
-      response.data?.images?.[0]?.url ??
-      response.data?.output?.images?.[0];
-
-    if (!imageUrl) throw new Error("Seedream returned no image URL");
-    return { imageUrl };
+    return extractGeneratedImage(response.data);
   }
 }
 
+const sakuraProvider = new SakuraImageProvider();
 const PROVIDERS: Record<string, ImageProvider> = {
-  seedream: new SeedreamProvider(),
+  [DEFAULT_IMAGE_PROVIDER]: sakuraProvider,
+  seedream: sakuraProvider,
 };
 
 function getProvider(name?: string): ImageProvider {
-  const key = name ?? process.env.IMAGE_PROVIDER ?? "seedream";
+  const key = name ?? process.env.IMAGE_PROVIDER ?? DEFAULT_IMAGE_PROVIDER;
   const p = PROVIDERS[key];
   if (!p) throw new Error(`Unknown image provider: ${key}`);
   return p;
@@ -242,6 +230,22 @@ export async function generateShotImages(input: ImageGenInput): Promise<Generate
   const shot = await prisma.shot.findUnique({ where: { id: shotId } });
   if (!shot) throw new Error(`Shot ${shotId} not found`);
 
+  // 读取项目宽高比与 StyleBible（影响宽高比和视觉风格注入）
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { aspect: true, styleBible: true },
+  });
+  const projectAspect = project?.aspect ?? "9:16";
+  const styleBible = project?.styleBible
+    ? {
+        visualStyle: project.styleBible.visualStyle,
+        colorStrategy: project.styleBible.colorStrategy,
+        eraAesthetic: project.styleBible.eraAesthetic,
+        negativeKeywords: project.styleBible.negativeKeywords,
+        genreTag: project.styleBible.genreTag,
+      }
+    : undefined;
+
   await prisma.shot.update({
     where: { id: shotId },
     data: {
@@ -254,23 +258,34 @@ export async function generateShotImages(input: ImageGenInput): Promise<Generate
   // 若未指定 provider，自动从历史统计推荐最优
   let resolvedProvider = input.provider;
   if (!resolvedProvider) {
-    const rec = await recommendProvider(projectId, "image", "seedream");
+    const rec = await recommendProvider(projectId, "image", DEFAULT_IMAGE_PROVIDER);
     resolvedProvider = rec.provider;
     console.log(`[image-gen] Auto-selected provider: ${rec.provider} — ${rec.reason}`);
   }
 
   const imageProvider = getProvider(resolvedProvider);
   const results: GenerateImageResult["takes"] = [];
+  const resolvedPrompt = prompt?.trim() || shot.visualPrompt?.trim();
+  if (!resolvedPrompt) {
+    await prisma.shot.update({
+      where: { id: shotId },
+      data: { pipelineStage: "draft" },
+    });
+    throw new Error(`No visual prompt available for shot ${shotId}`);
+  }
   const characterConstraints = input.characterConstraints ?? await buildCharacterConstraints(
     shot.subjectCharIds,
     shot.cameraAngle,
     shot.emotionGoal
   );
   const finalRefUrls = Array.from(new Set([...(refImageUrls ?? []), ...characterConstraints.refAssetUrls])).slice(0, 6);
-  const constrainedPrompt = composeImagePrompt(
-    `${prompt}${characterConstraints.selectionSummary ? `, selected role assets: ${characterConstraints.selectionSummary}` : ""}`,
-    characterConstraints
+  const composed = composeImagePrompt(
+    `${resolvedPrompt}${characterConstraints.selectionSummary ? `, selected role assets: ${characterConstraints.selectionSummary}` : ""}`,
+    characterConstraints,
+    styleBible
   );
+  const constrainedPrompt = composed.prompt;
+  const negativePrompt = composed.negativePrompt;
 
   for (let i = 0; i < candidateCount; i++) {
     const takeId = generateId();
@@ -303,8 +318,10 @@ export async function generateShotImages(input: ImageGenInput): Promise<Generate
 
     const paramsSnapshot = {
       provider: imageProvider.name,
-      prompt,
+      prompt: resolvedPrompt,
       constrainedPrompt: retryPrompt,
+      negativePrompt,
+      aspectRatio: projectAspect,
       refImageUrls: finalRefUrls,
       characterConstraints,
       candidateIndex: i,
@@ -313,7 +330,10 @@ export async function generateShotImages(input: ImageGenInput): Promise<Generate
     saveTakeInputJson(projectId, episodeId, sceneId, shotId, takeId, paramsSnapshot);
 
     try {
-      const genResult = await imageProvider.generate(retryPrompt, finalRefUrls);
+      const genResult = await imageProvider.generate(retryPrompt, finalRefUrls, {
+        aspectRatio: projectAspect,
+        negativePrompt,
+      });
 
       let localPath: string;
       let url: string;
@@ -477,6 +497,8 @@ async function buildCharacterConstraints(
       },
     },
   });
+  // 主角始终排第一：防止配角（尤其老年角色）的特征排在前面污染生成结果
+  characters.sort((a, b) => Number(b.isLead) - Number(a.isLead));
 
   const selectedAssets = await selectCharacterAssetsForShot({
     subjectCharIdsRaw,
@@ -503,7 +525,7 @@ async function buildCharacterConstraints(
 // ─── 含任务追踪的包装入口 ─────────────────────────────────────────────────────
 
 export async function generateShotImagesWithTask(input: ImageGenInput) {
-  return enqueueTask(
+  return dispatchTask(
     {
       projectId: input.projectId,
       shotId: input.shotId,

@@ -7,6 +7,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { jsonError, validateShotDialoguePatchBody } from "@/lib/route-validation";
 
 export async function PATCH(
   req: NextRequest,
@@ -14,12 +15,11 @@ export async function PATCH(
 ) {
   try {
     const { shotId } = await params;
-    const body = await req.json() as {
-      dialogue?: string;
-      audioPrompt?: string;
-      sentenceIndex?: number;
-      newSentenceText?: string;
-    };
+    const parsed = validateShotDialoguePatchBody(await req.json().catch(() => null));
+    if (!parsed.ok) {
+      return parsed.response;
+    }
+    const body = parsed.value;
 
     const shot = await prisma.shot.findUnique({ where: { id: shotId } });
     if (!shot) return NextResponse.json({ error: "Shot not found" }, { status: 404 });
@@ -29,10 +29,11 @@ export async function PATCH(
     if (body.sentenceIndex !== undefined && body.newSentenceText !== undefined) {
       // 句级修正：按句分割（中文「。」「！」「？」或换行），修改指定句
       const sentences = newDialogue.split(/(?<=[。！？\n])/);
-      if (body.sentenceIndex < sentences.length) {
-        sentences[body.sentenceIndex] = body.newSentenceText;
-        newDialogue = sentences.join("");
+      if (body.sentenceIndex >= sentences.length) {
+        return jsonError(400, "sentence_index_out_of_range", "sentenceIndex is out of range for the current dialogue");
       }
+      sentences[body.sentenceIndex] = body.newSentenceText;
+      newDialogue = sentences.join("");
     } else if (body.dialogue !== undefined) {
       newDialogue = body.dialogue;
     }

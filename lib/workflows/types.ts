@@ -33,6 +33,8 @@ export interface StoryOutlineEpisodeBeat {
   logline: string;
   hook: string;
   cliffhanger: string;
+  openingTrigger?: string;
+  pressureSource?: string;
   escalation?: string;
   emotionalShift?: string;
   sceneGoal?: string;
@@ -54,6 +56,11 @@ export interface StoryOutlineResult {
   }>;
   characters: StoryOutlineCharacter[];
   episodeBeats: StoryOutlineEpisodeBeat[];
+  blockers?: Array<{
+    code: string;
+    title: string;
+    detail: string;
+  }>;
 }
 
 export interface NewCharacterDraft {
@@ -63,6 +70,8 @@ export interface NewCharacterDraft {
 
 export interface StoryCastCharacterResult {
   name: string;
+  gender: string;
+  ageRange: string;
   role: string;
   conflictRole: string;
   dramaticGoal: string;
@@ -70,6 +79,19 @@ export interface StoryCastCharacterResult {
   arcSummary: string;
   visualDraft: string;
   voiceDraft: string;
+  facialFeatures: string;
+  hairstyle: string;
+  bodyType: string;
+  wardrobeBase: string;
+  temperamentTags: string;
+  typicalExpressions: string;
+  typicalActions: string;
+  anchorFace: string;
+  anchorHair: string;
+  anchorWardrobe: string;
+  wardrobeVariants: string;
+  emotionRange: string;
+  sceneOutfits: string;
   basePrompt: string;
   isLead?: boolean;
 }
@@ -105,6 +127,11 @@ export interface StoryScriptDialogueMoment {
 
 export interface StoryScriptDraftResult {
   opening: string;
+  openingTrigger: string;
+  immediateCost: string;
+  escalationBeats: string[];
+  payoffMoment: string;
+  endingCliffType: string;
   scenePlan: Array<string | StoryScriptSceneCard>;
   dialogueMoments: Array<string | StoryScriptDialogueMoment>;
   fullText: string;
@@ -126,6 +153,7 @@ export interface SceneBreakdown {
 
 export interface ShotBreakdown {
   shotOrder: number;
+  dramaticTag?: string;
   shotType: string;       // ECU | CU | MCU | MS | FS | LS | ELS
   cameraAngle: string;
   cameraMotion: string;
@@ -211,8 +239,29 @@ export interface QAReviewResult {
   verdict: QAVerdict;
   score: number;
   failTags: QAVerdictTag[];
+  contentTags?: QAVerdictTag[];
   suggestion: QASuggestion;
   details: string;
+}
+
+export interface ScriptContentMeta {
+  openingTrigger: string;
+  immediateCost: string;
+  escalationBeats: string[];
+  payoffMoment: string;
+  endingCliffType: string;
+  contentBlockers: Array<{
+    code: string;
+    title: string;
+    detail: string;
+  }>;
+  stats: {
+    sceneCount: number;
+    dialogueMomentCount: number;
+    hookPass: boolean;
+    escalationPass: boolean;
+    cliffhangerPass: boolean;
+  };
 }
 
 export interface TaskRefPayload {

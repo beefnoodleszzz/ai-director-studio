@@ -1,32 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { breakdownScriptWithTask, commitPendingBreakdown } from "@/lib/workflows/script-breakdown";
-import type { ScriptBreakdownResult } from "@/lib/workflows/types";
+import { validateScriptBreakdownBody } from "@/lib/route-validation";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as {
-      episodeId: string;
-      projectId: string;
-      script: string;
-      source?: "generated-script" | "manual-script";
-      // 当 status === NEED_CHARACTER_SETUP 后，前端补完角色再调用，携带 pendingData
-      pendingData?: ScriptBreakdownResult;
-    };
-
-    const { episodeId, projectId, script, pendingData, source = "manual-script" } = body;
-
-    if (!episodeId || !projectId) {
-      return NextResponse.json({ error: "episodeId and projectId are required" }, { status: 400 });
+    const parsed = validateScriptBreakdownBody(await req.json().catch(() => null));
+    if (!parsed.ok) {
+      return parsed.response;
     }
+    const { episodeId, projectId, script, pendingData, source = "manual-script" } = parsed.value;
 
     // 恢复模式：角色圣经已就绪，提交挂起数据
     if (pendingData) {
       const result = await commitPendingBreakdown(episodeId, pendingData);
       return NextResponse.json({ status: "SUCCESS", ...result });
-    }
-
-    if (!script) {
-      return NextResponse.json({ error: "script is required" }, { status: 400 });
     }
 
     if (source === "generated-script") {
@@ -38,7 +25,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const result = await breakdownScriptWithTask({ projectId, episodeId, script });
+    const result = await breakdownScriptWithTask({ projectId, episodeId, script: script ?? "" });
     return NextResponse.json({
       source,
       ...result,

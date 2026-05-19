@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { generateShotImagesWithTask } from "@/lib/workflows/image-generation";
 import { generateShotVideoWithTask } from "@/lib/workflows/video-generation";
 import { generateShotAudioWithTask } from "@/lib/workflows/audio-generation";
+import { jsonError, validateBatchRetryBody } from "@/lib/route-validation";
 
 export async function POST(
   req: NextRequest,
@@ -13,18 +14,23 @@ export async function POST(
 ) {
   try {
     const { id: projectId } = await params;
-    const body = await req.json() as {
-      takeIds: string[];
-      provider?: string;
-    };
-
-    const { takeIds, provider } = body;
-    if (!takeIds?.length) {
-      return NextResponse.json({ error: "takeIds required" }, { status: 400 });
+    const parsed = validateBatchRetryBody(await req.json().catch(() => null));
+    if (!parsed.ok) {
+      return parsed.response;
     }
+    const { takeIds, provider } = parsed.value;
 
     const takes = await prisma.take.findMany({
-      where: { id: { in: takeIds } },
+      where: {
+        id: { in: takeIds },
+        shot: {
+          scene: {
+            episode: {
+              projectId,
+            },
+          },
+        },
+      },
       include: {
         shot: {
           include: {
@@ -37,6 +43,9 @@ export async function POST(
         },
       },
     });
+    if (takes.length !== takeIds.length) {
+      return jsonError(404, "take_not_found", "One or more takeIds do not belong to the current project");
+    }
 
     const taskIds: string[] = [];
     for (const take of takes) {
@@ -53,7 +62,7 @@ export async function POST(
             sceneId: scId,
             shotId,
             prompt: shot.visualPrompt,
-            provider: provider ?? take.provider ?? "seedream",
+            provider: provider ?? take.provider ?? "sakura",
             candidateCount: 1,
           });
           taskIds.push(taskId);

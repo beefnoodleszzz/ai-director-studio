@@ -1,14 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTaskStatus, getProjectTasks, getQueueStats, cancelTask } from "@/lib/task-queue";
+import { getTaskStatus, getProjectTasks, getQueueStats, cancelTask, parseTaskEvents } from "@/lib/task-queue";
 import { prisma } from "@/lib/prisma";
 import { removePublicUrlIfExists } from "@/lib/asset";
 import { parseBlockMeta } from "@/lib/studio-contracts";
+import {
+  parseTaskStatusDeleteQueryParams,
+  parseTaskStatusQueryParams,
+} from "@/lib/route-validation";
 
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const taskId = searchParams.get("taskId");
-    const projectId = searchParams.get("projectId");
+    const parsed = parseTaskStatusQueryParams(req.url);
+    if (!parsed.ok) {
+      return parsed.response;
+    }
+
+    const { taskId, projectId } = parsed.value;
 
     if (taskId) {
       const status = await getTaskStatus(taskId);
@@ -23,6 +30,7 @@ export async function GET(req: NextRequest) {
         tasks: tasks.map((task) => ({
           ...task,
           blockMeta: parseBlockMeta(task.blockMeta),
+          events: parseTaskEvents(task.logs),
         })),
         queueStats,
       });
@@ -38,12 +46,12 @@ export async function GET(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const taskId = searchParams.get("taskId");
-    if (!taskId) return NextResponse.json({ error: "taskId required" }, { status: 400 });
+    const parsed = parseTaskStatusDeleteQueryParams(req.url);
+    if (!parsed.ok) {
+      return parsed.response;
+    }
 
-    const hardDelete = searchParams.get("hardDelete") === "true";
-    const deleteOutput = searchParams.get("deleteOutput") === "true";
+    const { taskId, hardDelete, deleteOutput } = parsed.value;
 
     const task = await prisma.generationTask.findUnique({ where: { id: taskId } });
     if (!task) return NextResponse.json({ error: "Task not found" }, { status: 404 });

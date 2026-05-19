@@ -14,10 +14,8 @@ model Project {
   title        String
   type         String      @default("short-drama") // short-drama | manga-drama
   aspect       String      @default("9:16")        // 9:16 | 16:9
-  platform     String      @default("")
   worldSetting String      @default("") // 世界观核心设定
   era          String      @default("") // 时代/地点
-  forbidRules  String      @default("") // 禁改规则 (JSON array as string)
   storyOutline  String     @default("") // JSON: logline / conflict / cast / episode beats
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
@@ -27,7 +25,6 @@ model Project {
   episodes     Episode[]
   tasks        GenerationTask[]
   exports      ExportRecord[]
-  templates    PromptTemplate[]
 }
 
 // ─── StyleBible ───────────────────────────────────────────────────────────────
@@ -97,6 +94,9 @@ model CharacterBible {
   project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   voiceProfile VoiceProfile?
   assets       CharacterAsset[]
+
+  @@index([projectId, isLead])
+  @@index([projectId, assetStatus])
 }
 
 // ─── CharacterAsset ───────────────────────────────────────────────────────────
@@ -112,6 +112,9 @@ model CharacterAsset {
   createdAt   DateTime @default(now())
 
   character CharacterBible @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@index([characterId, createdAt])
+  @@index([characterId, assetType])
 }
 
 // ─── VoiceProfile ─────────────────────────────────────────────────────────────
@@ -145,6 +148,7 @@ model Episode {
   cliffhanger String @default("") // 结尾悬念
   prevLink    String @default("") // 上集承接点
   scriptDraft String @default("") // AI / 手工确认后的正文剧本
+  scriptMeta  String @default("") // JSON: 结构化剧本元信息与校验结果
   scriptSource String @default("manual") // manual | generated
   productionStage String @default("idea") // idea | outline_ready | cast_locked | script_ready | breakdown_ready | production_ready
   createdAt   DateTime @default(now())
@@ -153,6 +157,9 @@ model Episode {
   project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   scenes  Scene[]
   exports ExportRecord[]
+
+  @@index([projectId, episodeNum])
+  @@index([projectId, createdAt])
 }
 
 // ─── Scene ────────────────────────────────────────────────────────────────────
@@ -175,6 +182,9 @@ model Scene {
 
   episode Episode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
   shots   Shot[]
+
+  @@index([episodeId, sceneOrder])
+  @@index([episodeId, deletedAt])
 }
 
 // ─── Shot ─────────────────────────────────────────────────────────────────────
@@ -183,6 +193,7 @@ model Shot {
   id              String @id @default(uuid())
   sceneId         String
   shotOrder       Int
+  dramaticTag     String @default("") // hook-shot | pressure-shot | counter-shot | reaction-shot | cliff-shot
   shotType        String @default("") // 景别: ECU | CU | MCU | MS | FS | LS | ELS
   cameraAngle     String @default("") // 机位: eye | low | high | bird | dutch
   cameraMotion    String @default("") // 运动: static | pan | tilt | dolly | handheld | zoom
@@ -211,6 +222,11 @@ model Shot {
   scene Scene  @relation(fields: [sceneId], references: [id], onDelete: Cascade)
   takes Take[]
   tasks GenerationTask[]
+
+  @@index([sceneId, shotOrder])
+  @@index([sceneId, pipelineStage])
+  @@index([sceneId, exportReadiness])
+  @@index([sceneId, deletedAt])
 }
 
 // ─── Take ─────────────────────────────────────────────────────────────────────
@@ -237,6 +253,10 @@ model Take {
 
   shot    Shot     @relation(fields: [shotId], references: [id], onDelete: Cascade)
   reviews Review[]
+
+  @@index([shotId, takeType, isAdopted, isDiscarded])
+  @@index([shotId, takeType, createdAt])
+  @@index([provider, takeType])
 }
 
 // ─── GenerationTask ───────────────────────────────────────────────────────────
@@ -265,6 +285,10 @@ model GenerationTask {
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   shot    Shot?   @relation(fields: [shotId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, status, createdAt])
+  @@index([shotId, taskType, status])
+  @@index([status, priority, createdAt])
 }
 
 // ─── Review ───────────────────────────────────────────────────────────────────
@@ -276,34 +300,15 @@ model Review {
   verdict     String // pass | warn | fail
   score       Float  @default(0)
   failTags    String @default("") // JSON array of failure tag strings
+  contentTags String @default("") // JSON array of story/content quality tag strings
   suggestion  String // adopt | accept-minor | must-redo | change-provider
   details     String @default("") // 详细原因
   reviewedAt  DateTime @default(now())
 
   take Take @relation(fields: [takeId], references: [id], onDelete: Cascade)
-}
 
-// ─── PromptTemplate ───────────────────────────────────────────────────────────
-
-model PromptTemplate {
-  id           String @id @default(uuid())
-  projectId    String
-  name         String
-  category     String @default("") // image | video | audio | script
-  stylePrefix  String @default("") // 风格前缀
-  charAnchor   String @default("") // 角色锚点
-  shotDesc     String @default("") // 镜头描述
-  sceneDesc    String @default("") // 场景描述
-  actionDesc   String @default("") // 行为描述
-  emotionDesc  String @default("") // 情绪描述
-  qualitySuffix String @default("") // 技术质量后缀
-  negativePrompt String @default("") // 负面约束
-  version      Int    @default(1)
-  isActive     Boolean @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  @@index([takeId, reviewedAt])
+  @@index([reviewType, verdict, reviewedAt])
 }
 
 // ─── ExportRecord ─────────────────────────────────────────────────────────────
@@ -323,4 +328,7 @@ model ExportRecord {
 
   project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   episode Episode? @relation(fields: [episodeId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, createdAt])
+  @@index([projectId, episodeId, exportType])
 }

@@ -1,28 +1,34 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { generateShotImagesWithTask } from "@/lib/workflows/image-generation";
+import { prisma } from "@/lib/prisma";
+import { validateImageGenerationBody, jsonError } from "@/lib/route-validation";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as {
-      projectId: string;
-      episodeId: string;
-      sceneId: string;
-      shotId: string;
-      prompt?: string;
-      refImageUrls?: string[];
-      provider?: string;
-      candidateCount?: number;
-    };
-
-    const { projectId, episodeId, sceneId, shotId } = body;
-    if (!projectId || !episodeId || !sceneId || !shotId) {
-      return NextResponse.json(
-        { error: "projectId, episodeId, sceneId, shotId are required" },
-        { status: 400 }
-      );
+    const parsed = validateImageGenerationBody(await req.json().catch(() => null));
+    if (!parsed.ok) {
+      return parsed.response;
     }
 
-    const { taskId, result } = await generateShotImagesWithTask({
+    const body = parsed.value;
+    const { projectId, episodeId, sceneId, shotId } = body;
+    const shot = await prisma.shot.findFirst({
+      where: {
+        id: shotId,
+        sceneId,
+        scene: {
+          episodeId,
+          episode: { projectId },
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!shot) {
+      return jsonError(404, "shot_not_found", "Shot was not found for the provided project/episode/scene context");
+    }
+
+    const { taskId } = await generateShotImagesWithTask({
       projectId,
       episodeId,
       sceneId,
@@ -33,9 +39,9 @@ export async function POST(req: NextRequest) {
       candidateCount: body.candidateCount ?? 2,
     });
 
-    return NextResponse.json({ taskId, ...result });
+    return Response.json({ taskId, status: "queued" });
   } catch (err) {
     console.error("[api/generate/image]", err);
-    return NextResponse.json({ error: "Image generation failed" }, { status: 500 });
+    return jsonError(500, "image_generation_failed", "Image generation failed");
   }
 }

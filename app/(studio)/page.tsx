@@ -179,7 +179,7 @@ function CreateProjectSheet({ onCreated }: { onCreated: (project: ProjectData) =
       setTitle("");
       setWorldSetting("");
       setEra("");
-      toast.success("项目创建成功，请先完善风格圣经和角色圣经");
+      toast.success("项目创建成功");
     } catch {
       toast.error("创建失败，请重试");
     } finally {

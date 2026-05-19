@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { generateShotImagesWithTask } from "@/lib/workflows/image-generation";
+import { validateBatchImageGenerationBody } from "@/lib/route-validation";
 
 export async function POST(
   req: NextRequest,
@@ -11,14 +12,12 @@ export async function POST(
 ) {
   try {
     const { id: projectId, epId: episodeId, scId: sceneId } = await params;
-    const body = await req.json().catch(() => ({})) as {
-      shotIds?: string[];
-      onlyFailed?: boolean;
-      provider?: string;
-      nCandidates?: number;
-    };
-
-    const { onlyFailed = false, provider, nCandidates: candidateCount = 2 } = body;
+    const parsed = validateBatchImageGenerationBody(await req.json().catch(() => ({})));
+    if (!parsed.ok) {
+      return parsed.response;
+    }
+    const body = parsed.value;
+    const { onlyFailed = false, provider, candidateCount = 2 } = body;
 
     // 查询场次内所有镜头
     const shots = await prisma.shot.findMany({
@@ -57,7 +56,7 @@ export async function POST(
           sceneId,
           shotId: shot.id,
           prompt: shot.visualPrompt,
-          provider: provider ?? "seedream",
+          provider: provider ?? "sakura",
           candidateCount,
         });
         taskIds.push(taskId);

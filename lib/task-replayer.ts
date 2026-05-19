@@ -7,7 +7,8 @@ import { assembleShortDrama } from "@/lib/workflows/assembly";
 import { breakdownScript, type BreakdownScriptInput } from "@/lib/workflows/script-breakdown";
 import type { AssemblyInput, AudioGenInput, ImageGenInput, VideoGenInput } from "@/lib/workflows/types";
 
-type ReplayableTaskType = "script-breakdown" | "image" | "video" | "audio" | "assembly";
+export const REPLAYABLE_TASK_TYPES = ["script-breakdown", "image", "video", "audio", "assembly"] as const;
+export type ReplayableTaskType = (typeof REPLAYABLE_TASK_TYPES)[number];
 
 interface ReplayableTaskRecord {
   id: string;
@@ -19,6 +20,10 @@ interface ReplayableTaskRecord {
   priority: number;
   maxAttempts: number;
   inputRef: string;
+}
+
+export function isReplayableTaskType(taskType: string): taskType is ReplayableTaskType {
+  return REPLAYABLE_TASK_TYPES.includes(taskType as ReplayableTaskType);
 }
 
 function parseInputRef<T>(raw: string): T {
@@ -128,6 +133,3 @@ export async function shouldSkipRecoveredTask(task: ReplayableTaskRecord) {
   return false;
 }
 
-export function isReplayableTaskType(taskType: string): taskType is ReplayableTaskType {
-  return ["script-breakdown", "image", "video", "audio", "assembly"].includes(taskType);
-}

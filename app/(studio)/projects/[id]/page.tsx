@@ -33,7 +33,6 @@ interface ProjectDetail {
   title: string;
   type: string;
   aspect: string;
-  platform: string;
   worldSetting: string;
   era: string;
   createdAt: string;
@@ -46,10 +45,6 @@ interface ProjectDetail {
     productionStage: string;
     scenes: { id: string; shots: { id: string; pipelineStage: string; exportReadiness: string }[] }[];
   }[];
-  progress?: {
-    currentStage: string;
-    stageCounts: Record<string, number>;
-  };
 }
 
 const EPISODE_STAGE_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
@@ -252,15 +247,9 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ id: 
         <SectionHeading
           eyebrow="优化"
           title="质量飞轮"
-          description="通过模板、基准、角色一致性和统计面板持续提升整条生成链路的稳定性。"
+          description="通过基准、角色一致性和统计面板持续提升整条生成链路的稳定性。"
         />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <NavCard
-            href={`/projects/${id}/templates`}
-            icon={FileText}
-            title="Prompt 模板库"
-            description="结构化 Prompt 模板，跨集复用，告别手写"
-          />
           <NavCard
             href={`/projects/${id}/benchmark`}
             icon={BarChart2}

@@ -15,6 +15,7 @@ import { assembleEpisode } from "@/lib/ffmpeg";
 import { paths, initExportDirs, toAbsolutePublicPath } from "@/lib/asset";
 import { enqueueTask } from "@/lib/task-queue";
 import { recalculateEpisodeStage } from "@/lib/production-state";
+import { getDefaultProductionSpec } from "@/lib/genre-template";
 import type { AssemblyInput } from "./types";
 
 // ─── Manifest 结构 ────────────────────────────────────────────────────────────
@@ -59,6 +60,8 @@ interface ExportPreflightShotIssue {
     | "missing-image"
     | "missing-audio"
     | "image-fallback"
+    | "critical-shot-fallback"
+    | "missing-bgm"
     | "resolution-too-low"
     | "shot-blocked";
   severity: "warn" | "error";
@@ -132,6 +135,7 @@ interface ResolvedShotMedia {
   sceneId: string;
   sceneOrder: number;
   shotOrder: number;
+  dramaticTag: string | null;
   shotType: string | null;
   emotionGoal: string | null;
   exportReadiness: string;
@@ -175,6 +179,7 @@ async function buildPreflight(
 ): Promise<ExportPreflight> {
   const minWidth = options.minResolution?.width ?? 720;
   const minHeight = options.minResolution?.height ?? 1280;
+  const spec = getDefaultProductionSpec();
   const issues: ExportPreflightShotIssue[] = [];
 
   let readyShots = 0;
@@ -195,6 +200,7 @@ async function buildPreflight(
     const hasVideo = !!shot.adoptedVideoTake?.localVideo;
     const hasImage = !!shot.adoptedImageTake?.localImage;
     const hasAudio = !!shot.adoptedAudioTake?.localAudio;
+    const isCriticalFallbackShot = spec.criticalDramaticTags.includes(shot.dramaticTag ?? "");
 
     if (shot.exportReadiness === "blocked") {
       blockedShots += 1;
@@ -212,9 +218,13 @@ async function buildPreflight(
       missingVideoShots += 1;
       issues.push({
         ...base,
-        code: hasImage ? "image-fallback" : "missing-video",
-        severity: hasImage ? "warn" : "error",
-        message: hasImage ? "缺少采用视频，将退回首帧动效导出" : "缺少采用视频",
+        code: hasImage ? (isCriticalFallbackShot ? "critical-shot-fallback" : "image-fallback") : "missing-video",
+        severity: hasImage ? (isCriticalFallbackShot ? "error" : "warn") : "error",
+        message: hasImage
+          ? isCriticalFallbackShot
+            ? "关键戏剧镜头不能只用首帧动效兜底"
+            : "缺少采用视频，将退回首帧动效导出"
+          : "缺少采用视频",
       });
       if (hasImage) fallbackShots += 1;
     }
@@ -233,7 +243,7 @@ async function buildPreflight(
       issues.push({
         ...base,
         code: "missing-audio",
-        severity: "warn",
+        severity: "error",
         message: "缺少采用音频，导出将没有对白主轨",
       });
     }
@@ -275,10 +285,21 @@ async function buildPreflight(
   }
 
   const resolvedBgm = !!(options.bgmPath && fs.existsSync(options.bgmPath));
+  if (spec.requireBgm && !resolvedBgm) {
+    issues.push({
+      shotId: "episode",
+      sceneOrder: 0,
+      shotOrder: 0,
+      code: "missing-bgm",
+      severity: "warn",
+      message: "验证样片建议补齐基础 BGM。",
+    });
+  }
   const hasBlockingIssues = issues.some((issue) => issue.severity === "error");
+  const fallbackRatio = fallbackShots / Math.max(1, shots.length);
 
   return {
-    ok: !hasBlockingIssues,
+    ok: !hasBlockingIssues && fallbackRatio <= spec.maxImageFallbackRatio,
     counts: {
       totalShots: shots.length,
       readyShots,
@@ -382,6 +403,7 @@ export async function assembleShortDrama(input: AssemblyInput): Promise<Assembly
             select: {
               id: true,
               shotOrder: true,
+              dramaticTag: true,
               shotType: true,
               emotionGoal: true,
               exportReadiness: true,
@@ -439,6 +461,7 @@ export async function assembleShortDrama(input: AssemblyInput): Promise<Assembly
         sceneId: scene.id,
         sceneOrder: scene.sceneOrder,
         shotOrder: shot.shotOrder,
+        dramaticTag: shot.dramaticTag,
         shotType: shot.shotType,
         emotionGoal: shot.emotionGoal,
         exportReadiness: shot.exportReadiness,
@@ -586,6 +609,7 @@ export async function previewShortDramaExport(input: AssemblyInput) {
             select: {
               id: true,
               shotOrder: true,
+              dramaticTag: true,
               shotType: true,
               emotionGoal: true,
               exportReadiness: true,
@@ -630,6 +654,7 @@ export async function previewShortDramaExport(input: AssemblyInput) {
         sceneId: scene.id,
         sceneOrder: scene.sceneOrder,
         shotOrder: shot.shotOrder,
+        dramaticTag: shot.dramaticTag,
         shotType: shot.shotType,
         emotionGoal: shot.emotionGoal,
         exportReadiness: shot.exportReadiness,

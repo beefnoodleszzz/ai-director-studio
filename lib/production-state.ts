@@ -167,12 +167,13 @@ export function deriveEpisodeStage(input: {
   hasOutline: boolean;
   hasLead: boolean;
   hasScript: boolean;
+  scriptPassed: boolean;
   hasScenes: boolean;
   hasProductionReadyShots: boolean;
 }): EpisodeProductionStage {
   if (input.hasProductionReadyShots) return "production_ready";
   if (input.hasScenes) return "breakdown_ready";
-  if (input.hasScript) return "script_ready";
+  if (input.hasScript && input.scriptPassed) return "script_ready";
   if (input.hasLead) return "cast_locked";
   if (input.hasOutline) return "outline_ready";
   return "idea";
@@ -181,7 +182,9 @@ export function deriveEpisodeStage(input: {
 export async function recalculateEpisodeStage(episodeId: string) {
   const episode = await prisma.episode.findUnique({
     where: { id: episodeId },
-    include: {
+    select: {
+      scriptDraft: true,
+      scriptMeta: true,
       project: {
         select: {
           storyOutline: true,
@@ -209,6 +212,8 @@ export async function recalculateEpisodeStage(episodeId: string) {
   const hasOutline = Boolean(episode.project.storyOutline.trim());
   const hasLead = episode.project.characters.some((character) => character.isLead);
   const hasScript = Boolean(episode.scriptDraft.trim());
+  const scriptMeta = episode.scriptMeta ? safeParseScriptMeta(episode.scriptMeta) : null;
+  const scriptPassed = scriptMeta ? scriptMeta.contentBlockers.length === 0 : !hasScript ? false : true;
   const hasScenes = episode.scenes.length > 0;
   const shots = episode.scenes.flatMap((scene) => scene.shots);
   const hasProductionReadyShots =
@@ -216,6 +221,7 @@ export async function recalculateEpisodeStage(episodeId: string) {
     shots.every(
       (shot) =>
         Boolean(shot.adoptedImageTakeId) &&
+        Boolean(shot.adoptedAudioTakeId) &&
         shot.exportReadiness !== "blocked"
     );
 
@@ -223,6 +229,7 @@ export async function recalculateEpisodeStage(episodeId: string) {
     hasOutline,
     hasLead,
     hasScript,
+    scriptPassed,
     hasScenes,
     hasProductionReadyShots,
   });
@@ -231,6 +238,16 @@ export async function recalculateEpisodeStage(episodeId: string) {
     where: { id: episodeId },
     data: { productionStage },
   });
+}
+
+function safeParseScriptMeta(raw: string) {
+  try {
+    return JSON.parse(raw) as {
+      contentBlockers: Array<unknown>;
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function deriveProjectProgress(episodes: Array<{ productionStage: string | null | undefined }>) {

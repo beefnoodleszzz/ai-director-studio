@@ -1,24 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assembleWithTask, ExportPreflightError, previewShortDramaExport } from "@/lib/workflows/assembly";
+import { validateAssembleBody } from "@/lib/route-validation";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as {
-      projectId: string;
-      episodeId: string;
-      aspect?: "16:9" | "9:16";
-      bgmPath?: string;
-      previewOnly?: boolean;
-      minResolution?: {
-        width: number;
-        height: number;
-      };
-    };
-
-    const { projectId, episodeId } = body;
-    if (!projectId || !episodeId) {
-      return NextResponse.json({ error: "projectId and episodeId are required" }, { status: 400 });
+    const parsed = validateAssembleBody(await req.json().catch(() => null));
+    if (!parsed.ok) {
+      return parsed.response;
     }
+    const body = parsed.value;
+    const { projectId, episodeId } = body;
 
     if (body.previewOnly) {
       const preview = await previewShortDramaExport({

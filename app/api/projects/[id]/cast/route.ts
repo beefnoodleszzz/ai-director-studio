@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { deriveProjectProgress, recalculateEpisodeStage } from "@/lib/production-state";
+import { recalculateEpisodeStage } from "@/lib/production-state";
+import { validateCastPatchBody } from "@/lib/route-validation";
 
 async function buildCastPayload(projectId: string) {
   const project = await prisma.project.findUnique({
@@ -8,7 +9,6 @@ async function buildCastPayload(projectId: string) {
     select: {
       id: true,
       storyOutline: true,
-      episodes: { select: { id: true, productionStage: true } },
       characters: {
         orderBy: { createdAt: "asc" },
         select: {
@@ -32,7 +32,6 @@ async function buildCastPayload(projectId: string) {
 
   return {
     id: project.id,
-    progress: deriveProjectProgress(project.episodes),
     storyOutline: project.storyOutline,
     leadCharacterId: project.characters.find((character) => character.isLead)?.id ?? null,
     characters: project.characters,
@@ -63,19 +62,11 @@ export async function PATCH(
 ) {
   try {
     const { id: projectId } = await params;
-    const body = (await req.json()) as {
-      leadCharacterId?: string;
-      characters?: Array<{
-        id: string;
-        role?: string;
-        dramaticGoal?: string;
-        conflictRole?: string;
-        relationshipSummary?: string;
-        arcSummary?: string;
-        basePrompt?: string;
-        isLead?: boolean;
-      }>;
-    };
+    const parsed = validateCastPatchBody(await req.json().catch(() => null));
+    if (!parsed.ok) {
+      return parsed.response;
+    }
+    const body = parsed.value;
 
     const project = await prisma.project.findUnique({
       where: { id: projectId },

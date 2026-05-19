@@ -1,13 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateCharacterCoreAssetPack } from "@/lib/workflows/character-assets";
+import { generateCharacterCoreAssetPackWithOptions } from "@/lib/workflows/character-assets";
+import { validateCharacterAssetGenerationBody } from "@/lib/route-validation";
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string; charId: string }> }
 ) {
   try {
     const { id: projectId, charId } = await params;
-    const result = await generateCharacterCoreAssetPack(projectId, charId);
+    let assetTypes: string[] | undefined;
+    let limit: number | undefined;
+
+    if (req.headers.get("content-type")?.includes("application/json")) {
+      const parsed = validateCharacterAssetGenerationBody(await req.json().catch(() => null));
+      if (!parsed.ok) {
+        return parsed.response;
+      }
+      assetTypes = parsed.value.assetTypes;
+      limit = parsed.value.limit;
+    }
+
+    const result = await generateCharacterCoreAssetPackWithOptions(projectId, charId, {
+      assetTypes,
+      limit,
+    });
 
     return NextResponse.json({
       ok: true,

@@ -8,7 +8,7 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createPrismaClient(): PrismaClient {
-  const rawUrl = process.env.DATABASE_URL ?? "file:./public/workspace/database.db";
+  const rawUrl = process.env.DATABASE_URL ?? "file:./workspace/database.db";
   const dbUrl = rawUrl.startsWith("file:./")
     // turbopackIgnore: true — 动态路径拼接仅在 Node.js 运行时执行，不应被静态追踪
     ? `file:${path.join(/*turbopackIgnore: true*/ process.cwd(), rawUrl.slice(7))}`

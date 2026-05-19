@@ -20,6 +20,11 @@ interface EpisodeLite {
 
 interface ScriptSections {
   opening: string;
+  openingTrigger?: string;
+  immediateCost?: string;
+  escalationBeats?: string;
+  payoffMoment?: string;
+  endingCliffType?: string;
   scenePlan: string;
   dialogueMoments: string;
   fullText: string;
@@ -47,6 +52,9 @@ interface StoryScriptPanelProps {
     blindSpots: string[];
   };
   voiceStyleHints?: string[];
+  contentBlockers?: Array<{ code: string; title: string; detail: string }>;
+  preflightReady?: boolean;
+  preflightSummary?: string;
   working: string | null;
   onEpisodeChange: (value: string) => void;
   onSectionChange: (field: keyof ScriptSections, value: string) => void;
@@ -67,6 +75,9 @@ export function StoryScriptPanel({
   leadLocked,
   dialogueGuidance,
   voiceStyleHints,
+  contentBlockers,
+  preflightReady,
+  preflightSummary,
   working,
   onEpisodeChange,
   onSectionChange,
@@ -139,7 +150,7 @@ export function StoryScriptPanel({
           </div>
           <div className="rounded-2xl border bg-muted/20 p-4">
             <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">下一阶段交接</p>
-            <p className="mt-2 text-sm font-medium">拆解会直接读取当前确认稿，而不是重新猜剧情。</p>
+            <p className="mt-2 text-sm font-medium">{preflightReady ? "当前可送入拆解" : "仍需先通过拆解前预检"}</p>
           </div>
         </div>
 
@@ -164,6 +175,27 @@ export function StoryScriptPanel({
           </div>
         ) : null}
 
+        <div className={`rounded-2xl border px-4 py-3 ${preflightReady ? "border-emerald-500/20 bg-emerald-500/5" : "border-amber-500/20 bg-amber-500/5"}`}>
+          <p className="text-sm font-medium">拆解前预检</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {preflightSummary || "还未达到送入拆解的条件。"}
+          </p>
+        </div>
+
+        {contentBlockers && contentBlockers.length > 0 ? (
+          <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-4">
+            <p className="text-sm font-medium">当前剧本还未达到仙侠样板标准</p>
+            <div className="mt-3 space-y-2">
+              {contentBlockers.map((blocker) => (
+                <div key={blocker.code} className="rounded-xl border bg-background/80 px-3 py-2">
+                  <p className="text-sm font-medium">{blocker.title}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{blocker.detail}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         <Tabs defaultValue="structured" className="space-y-4">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="structured">结构化修稿</TabsTrigger>
@@ -181,6 +213,26 @@ export function StoryScriptPanel({
                 <Textarea value={sections.endingHook} onChange={(e) => onSectionChange("endingHook", e.target.value)} rows={3} />
               </div>
             </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>开场异常</Label>
+                <Textarea value={sections.openingTrigger ?? ""} onChange={(e) => onSectionChange("openingTrigger", e.target.value)} rows={3} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>即时代价</Label>
+                <Textarea value={sections.immediateCost ?? ""} onChange={(e) => onSectionChange("immediateCost", e.target.value)} rows={3} />
+              </div>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>升级节点</Label>
+                <Textarea value={sections.escalationBeats ?? ""} onChange={(e) => onSectionChange("escalationBeats", e.target.value)} rows={4} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>兑现时刻</Label>
+                <Textarea value={sections.payoffMoment ?? ""} onChange={(e) => onSectionChange("payoffMoment", e.target.value)} rows={4} />
+              </div>
+            </div>
             <div className="space-y-1.5">
               <Label>场景推进提纲</Label>
               <Textarea value={sections.scenePlan} onChange={(e) => onSectionChange("scenePlan", e.target.value)} rows={5} />
@@ -192,6 +244,10 @@ export function StoryScriptPanel({
             <div className="space-y-1.5">
               <Label>完整正文</Label>
               <Textarea value={sections.fullText} onChange={(e) => onSectionChange("fullText", e.target.value)} rows={12} className="leading-6" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>悬点类型</Label>
+              <Textarea value={sections.endingCliffType ?? ""} onChange={(e) => onSectionChange("endingCliffType", e.target.value)} rows={2} />
             </div>
           </TabsContent>
 
@@ -208,7 +264,7 @@ export function StoryScriptPanel({
           <Button variant="outline" onClick={onSave} disabled={working !== null || !selectedEpisodeId}>
             保存当前剧本
           </Button>
-          <Button variant="outline" onClick={onBreakdown} disabled={working !== null || !selectedEpisodeId || !scriptReady || !leadLocked}>
+          <Button variant="outline" onClick={onBreakdown} disabled={working !== null || !selectedEpisodeId || !scriptReady || !leadLocked || !preflightReady}>
             {working === "breakdown" ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
             送入拆解
           </Button>

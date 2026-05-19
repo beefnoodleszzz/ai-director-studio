@@ -28,7 +28,7 @@ const MAX_GEN_MS = 120_000; // 2min 为参考最慢值
 export async function recommendProvider(
   projectId: string,
   takeType: string,
-  fallback = "seedream"
+  fallback = "sakura"
 ): Promise<{ provider: string; reason: string; scores: ProviderScore[] }> {
   // 取近 200 个该项目 + 该类型的 take
   const takes = await prisma.take.findMany({

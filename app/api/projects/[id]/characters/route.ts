@@ -5,6 +5,7 @@ import {
   buildCharacterAssetStatusSnapshot,
   normalizeCharacterAssetRecord,
 } from "@/lib/workflows/character-assets";
+import { validateCharacterCreateBody } from "@/lib/route-validation";
 
 export async function GET(
   _req: NextRequest,
@@ -41,49 +42,11 @@ export async function POST(
 ) {
   try {
     const { id: projectId } = await params;
-    const body = (await req.json()) as {
-      name: string;
-      aliases?: string;
-      gender?: string;
-      ageRange?: string;
-      role?: string;
-      // 稳定描述
-      facialFeatures?: string;
-      hairstyle?: string;
-      bodyType?: string;
-      wardrobeBase?: string;
-      temperamentTags?: string;
-      typicalExpressions?: string;
-      typicalActions?: string;
-      // 不可变锚点
-      anchorFace?: string;
-      anchorHair?: string;
-      anchorWardrobe?: string;
-      // 可变范围
-      wardrobeVariants?: string;
-      emotionRange?: string;
-      sceneOutfits?: string;
-      // 关系与 AI prompt
-      relationships?: string;
-      basePrompt?: string;
-      isLead?: boolean;
-      dramaticGoal?: string;
-      conflictRole?: string;
-      relationshipSummary?: string;
-      arcSummary?: string;
-      // 声音档案（可选同时创建）
-      voiceProfile?: {
-        voiceType?: string;
-        speechRate?: string;
-        provider?: string;
-        voiceId?: string;
-        emotionStyle?: string;
-      };
-    };
-
-    if (!body.name) {
-      return NextResponse.json({ error: "name is required" }, { status: 400 });
+    const parsed = validateCharacterCreateBody(await req.json().catch(() => null));
+    if (!parsed.ok) {
+      return parsed.response;
     }
+    const body = parsed.value;
 
     const character = await prisma.characterBible.create({
       data: {
@@ -118,10 +81,15 @@ export async function POST(
               voiceProfile: {
                 create: {
                   voiceType: body.voiceProfile.voiceType ?? "",
+                  ageFeeling: body.voiceProfile.ageFeeling ?? "",
+                  emotionStyle: body.voiceProfile.emotionStyle ?? "",
                   speechRate: body.voiceProfile.speechRate ?? "normal",
+                  pauseStyle: body.voiceProfile.pauseStyle ?? "",
+                  volume: body.voiceProfile.volume ?? 1,
+                  languageStyle: body.voiceProfile.languageStyle ?? "",
                   provider: body.voiceProfile.provider ?? "doubao-tts",
                   voiceId: body.voiceProfile.voiceId ?? "",
-                  emotionStyle: body.voiceProfile.emotionStyle ?? "",
+                  extraParams: body.voiceProfile.extraParams ?? "",
                 },
               },
             }

@@ -37,17 +37,19 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { ShotTimeline } from "@/components/studio/ShotTimeline";
 import { MediaPreview } from "@/components/studio/MediaPreview";
+import { pollTaskUntilSettled } from "@/lib/task-client";
 import {
   parseBlockMeta,
   type BlockMeta,
   type ShotPipelineStage,
 } from "@/lib/studio-contracts";
 
+const DEFAULT_IMAGE_PROVIDER = "sakura";
+const LEGACY_IMAGE_PROVIDER = "seedream";
+
 const IMAGE_PROVIDER_LABELS: Record<string, string> = {
-  seedream: "Seedream",
-  flux: "Flux",
-  midjourney: "Midjourney",
-  dalle3: "DALL·E 3",
+  [DEFAULT_IMAGE_PROVIDER]: "Sakura GPT-Image-2",
+  [LEGACY_IMAGE_PROVIDER]: "Sakura GPT-Image-2",
 };
 
 const VIDEO_PROVIDER_LABELS: Record<string, string> = {
@@ -86,6 +88,7 @@ export interface TakeData {
 export interface ShotData {
   id: string;
   shotOrder: number;
+  dramaticTag?: string | null;
   shotType: string;
   cameraAngle: string;
   cameraMotion: string;
@@ -103,6 +106,12 @@ export interface ShotData {
   exportReadiness?: "ready" | "warn" | "blocked" | string | null;
   blockReason?: string | null;
   blockMeta?: string | BlockMeta | null;
+  risk?: {
+    isCritical: boolean;
+    missingVideo: boolean;
+    imageFallbackOnly: boolean;
+    criticalNeedsVideo: boolean;
+  };
   takes: TakeData[];
 }
 
@@ -125,6 +134,11 @@ const BLOCK_REASON_LABELS: Record<string, string> = {
   "continuity-check-failed": "连续性质检未通过",
   "manual-review-required": "需要人工确认",
 };
+
+function normalizeLegacyImageProvider(provider?: string | null) {
+  if (provider === LEGACY_IMAGE_PROVIDER) return DEFAULT_IMAGE_PROVIDER;
+  return provider ?? undefined;
+}
 
 function getAdoptedTakeId(shot: ShotData, takeType: "image" | "video" | "audio") {
   const direct =
@@ -155,6 +169,9 @@ function TakeCard({ take, isAdopted, onAdopt, onDiscard }: TakeCardProps) {
   const verdictColor =
     verdict === "pass" ? "text-green-500" : verdict === "warn" ? "text-amber-500" : "text-destructive";
 
+  const mediaSrc = take.localVideo ?? take.localImage;
+  const mediaType = take.localVideo ? "video" : "image";
+
   return (
     <div
       className={cn(
@@ -162,13 +179,14 @@ function TakeCard({ take, isAdopted, onAdopt, onDiscard }: TakeCardProps) {
         isAdopted ? "border-primary ring-1 ring-primary" : "border-border hover:border-border/80"
       )}
     >
-      {/* 媒体预览 */}
+      {/* 媒体预览：视频候选通常只有 localVideo，没有 localImage */}
       <div className="relative aspect-[4/5] bg-muted lg:aspect-[3/4]">
-        {take.localImage ? (
+        {mediaSrc ? (
           <MediaPreview
-            type={take.localVideo ? "video" : "image"}
-            src={take.localVideo ?? take.localImage}
-            poster={take.localImage}
+            key={`${take.id}-${mediaSrc}`}
+            type={mediaType}
+            src={mediaSrc}
+            poster={take.localImage ?? undefined}
             title="Take preview"
             className="absolute inset-0"
           />
@@ -195,7 +213,11 @@ function TakeCard({ take, isAdopted, onAdopt, onDiscard }: TakeCardProps) {
       {/* 底部信息 */}
       <div className="space-y-2 p-3">
         <div className="flex items-center justify-between type-meta text-muted-foreground">
-          <span className="truncate">{take.provider || "unknown"}</span>
+          <span className="truncate">
+            {IMAGE_PROVIDER_LABELS[normalizeLegacyImageProvider(take.provider) ?? ""] ??
+              take.provider ??
+              "unknown"}
+          </span>
           <div className="flex items-center gap-0.5">
             <Star className="size-3 text-amber-400" />
             <span>{(take.autoScore * 10).toFixed(1)}</span>
@@ -262,7 +284,7 @@ function ShotCard({
   const [expanded, setExpanded] = useState(() => isHighlighted);
   const [generatingImage, setGeneratingImage] = useState(false);
   const [generatingVideo, setGeneratingVideo] = useState(false);
-  const [provider, setProvider] = useState("seedream");
+  const [provider, setProvider] = useState(DEFAULT_IMAGE_PROVIDER);
   const [videoProvider, setVideoProvider] = useState("seedance");
   const [compareOpen, setCompareOpen] = useState(false);
   const [recommendedProvider, setRecommendedProvider] = useState<string | null>(null);
@@ -274,12 +296,14 @@ function ShotCard({
     const load = async () => {
       try {
         const res = await axios.get<{ provider: string; reason: string }>(
-          `/api/projects/${projectId}/recommend-provider?takeType=image&fallback=seedream`
+          `/api/projects/${projectId}/recommend-provider?takeType=image&fallback=${DEFAULT_IMAGE_PROVIDER}`
         );
+        const normalizedProvider =
+          normalizeLegacyImageProvider(res.data.provider) ?? DEFAULT_IMAGE_PROVIDER;
         if (!cancelled) {
-          setRecommendedProvider(res.data.provider);
+          setRecommendedProvider(normalizedProvider);
           setRecommendReason(res.data.reason);
-          setProvider(res.data.provider);
+          setProvider(normalizedProvider);
         }
       } catch {
         // 静默失败，使用默认值
@@ -303,11 +327,45 @@ function ShotCard({
   const adoptedPreviewTakes = [adoptedImageTakeId, adoptedVideoTakeId, adoptedAudioTakeId]
     .map((id) => shot.takes.find((take) => take.id === id))
     .filter((take): take is TakeData => Boolean(take));
+  const risk = shot.risk;
+
+  const refreshShotFromServer = async () => {
+    const res = await axios.get<ShotData>(`/api/shots/${shot.id}`);
+    onUpdate(res.data);
+    return res.data;
+  };
+
+  const watchTask = async (taskId: string, successMessage: string) => {
+    try {
+      const status = await pollTaskUntilSettled(taskId);
+      await refreshShotFromServer();
+
+      if (status.status === "completed") {
+        toast.success(successMessage);
+        return;
+      }
+
+      if (status.status === "paused") {
+        toast.warning(status.blockReason || "任务已暂停，等待人工处理");
+        return;
+      }
+
+      if (status.status === "cancelled") {
+        toast.message("任务已取消");
+        return;
+      }
+
+      toast.error(status.errorReason || "任务执行失败");
+    } catch (error) {
+      console.error("[shot-workbench] failed to watch task", error);
+      toast.error("任务状态同步失败，请手动刷新");
+    }
+  };
 
   const handleGenerateImage = async () => {
     setGeneratingImage(true);
     try {
-      await axios.post("/api/generate/image", {
+      const res = await axios.post<{ taskId: string }>("/api/generate/image", {
         projectId,
         episodeId,
         sceneId,
@@ -316,9 +374,8 @@ function ShotCard({
         provider,
         candidateCount: 2,
       });
-      toast.success("图像候选生成完成");
-      const res = await axios.get<TakeData[]>(`/api/shots/${shot.id}/takes`);
-      onUpdate({ ...shot, takes: res.data });
+      toast.success("图像生成任务已入队");
+      void watchTask(res.data.taskId, "图像候选生成完成");
     } catch {
       toast.error("图像生成失败");
     } finally {
@@ -332,7 +389,7 @@ function ShotCard({
 
     setGeneratingVideo(true);
     try {
-      await axios.post("/api/generate/video", {
+      const res = await axios.post<{ taskId: string }>("/api/generate/video", {
         projectId,
         episodeId,
         sceneId,
@@ -341,9 +398,8 @@ function ShotCard({
         visualPrompt: shot.visualPrompt,
         provider: videoProvider,
       });
-      toast.success("视频生成完成");
-      const res = await axios.get<TakeData[]>(`/api/shots/${shot.id}/takes`);
-      onUpdate({ ...shot, takes: res.data });
+      toast.success("视频生成任务已入队");
+      void watchTask(res.data.taskId, "视频生成完成");
     } catch {
       toast.error("视频生成失败");
     } finally {
@@ -353,19 +409,35 @@ function ShotCard({
 
   const handleAdopt = async (takeId: string, takeType: string) => {
     try {
-      await axios.post(`/api/shots/${shot.id}/adopt`, { takeId, takeType });
+      type AdoptResponse = {
+        shotState?: {
+          pipelineStage?: string | null;
+          blockReason?: string | null;
+          blockMeta?: string | null;
+          exportReadiness?: string | null;
+          adoptedImageTakeId?: string | null;
+          adoptedVideoTakeId?: string | null;
+          adoptedAudioTakeId?: string | null;
+        };
+      };
+      const res = await axios.post<AdoptResponse>(`/api/shots/${shot.id}/adopt`, { takeId, takeType });
+      const takesRes = await axios.get<TakeData[]>(`/api/shots/${shot.id}/takes`);
+      const server = res.data.shotState;
+
       onUpdate({
         ...shot,
-        adoptedImageTakeId: takeType === "image" ? takeId : adoptedImageTakeId,
-        adoptedVideoTakeId: takeType === "video" ? takeId : adoptedVideoTakeId,
-        adoptedAudioTakeId: takeType === "audio" ? takeId : adoptedAudioTakeId,
-        pipelineStage:
-          takeType === "image" ? "image_ready" : takeType === "video" ? "video_ready" : "ready_for_export",
-        takes: shot.takes.map((t) => ({
-          ...t,
-          isAdopted: t.takeType === takeType ? t.id === takeId : t.isAdopted,
-          isDiscarded: t.id === takeId ? false : t.isDiscarded,
-        })),
+        takes: takesRes.data,
+        ...(server
+          ? {
+              pipelineStage: (server.pipelineStage ?? shot.pipelineStage) as ShotData["pipelineStage"],
+              blockReason: server.blockReason ?? shot.blockReason,
+              blockMeta: server.blockMeta ?? shot.blockMeta,
+              exportReadiness: (server.exportReadiness ?? shot.exportReadiness) as ShotData["exportReadiness"],
+              adoptedImageTakeId: server.adoptedImageTakeId ?? null,
+              adoptedVideoTakeId: server.adoptedVideoTakeId ?? null,
+              adoptedAudioTakeId: server.adoptedAudioTakeId ?? null,
+            }
+          : {}),
       });
       toast.success("已设为采用");
     } catch {
@@ -375,12 +447,37 @@ function ShotCard({
 
   const handleDiscard = async (takeId: string) => {
     try {
-      await axios.patch(`/api/shots/${shot.id}/takes/${takeId}`, { isDiscarded: true });
+      type PatchResponse = {
+        shotState?: {
+          pipelineStage?: string | null;
+          blockReason?: string | null;
+          blockMeta?: string | null;
+          exportReadiness?: string | null;
+          adoptedImageTakeId?: string | null;
+          adoptedVideoTakeId?: string | null;
+          adoptedAudioTakeId?: string | null;
+        };
+      };
+      const res = await axios.patch<PatchResponse>(`/api/shots/${shot.id}/takes/${takeId}`, {
+        isDiscarded: true,
+      });
+      const takesRes = await axios.get<TakeData[]>(`/api/shots/${shot.id}/takes`);
+      const server = res.data.shotState;
+
       onUpdate({
         ...shot,
-        takes: shot.takes.map((t) =>
-          t.id === takeId ? { ...t, isDiscarded: true, isAdopted: false } : t
-        ),
+        takes: takesRes.data,
+        ...(server
+          ? {
+              pipelineStage: (server.pipelineStage ?? shot.pipelineStage) as ShotData["pipelineStage"],
+              blockReason: server.blockReason ?? shot.blockReason,
+              blockMeta: server.blockMeta ?? shot.blockMeta,
+              exportReadiness: (server.exportReadiness ?? shot.exportReadiness) as ShotData["exportReadiness"],
+              adoptedImageTakeId: server.adoptedImageTakeId ?? null,
+              adoptedVideoTakeId: server.adoptedVideoTakeId ?? null,
+              adoptedAudioTakeId: server.adoptedAudioTakeId ?? null,
+            }
+          : {}),
       });
       toast.success("已废弃该 Take");
     } catch {
@@ -406,6 +503,11 @@ function ShotCard({
             <Badge variant="outline" className="text-xs px-1.5 py-0 shrink-0">
               {shot.shotType || "MS"}
             </Badge>
+            {shot.dramaticTag ? (
+              <Badge variant={risk?.isCritical ? "default" : "outline"} className="text-xs px-1.5 py-0 shrink-0">
+                {shot.dramaticTag}
+              </Badge>
+            ) : null}
             <Badge
               variant={shot.pipelineStage === "blocked_for_review" ? "destructive" : "secondary"}
               className="text-xs px-1.5 py-0 shrink-0"
@@ -472,6 +574,24 @@ function ShotCard({
             </div>
           )}
 
+          {risk?.criticalNeedsVideo ? (
+            <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+              <p className="text-sm font-medium text-amber-900">关键镜头仍在首帧兜底</p>
+              <p className="mt-1 text-sm text-amber-900/80">
+                这是 {shot.dramaticTag}，当前只有 adopted image，没有 adopted video。按样板门槛，这类镜头应优先视频化。
+              </p>
+            </div>
+          ) : null}
+
+          {risk?.isCritical && risk?.missingVideo && !risk?.imageFallbackOnly ? (
+            <div className="rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-3">
+              <p className="text-sm font-medium text-destructive">关键镜头缺少视频与首帧采用</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                这是 {shot.dramaticTag}，还没有可用于推进剧情的采用结果，建议优先处理。
+              </p>
+            </div>
+          ) : null}
+
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(19rem,0.95fr)]">
             <div className="space-y-4">
               <div className="space-y-1.5">
@@ -501,6 +621,7 @@ function ShotCard({
                         </div>
                         {(adopted.localVideo || adopted.localImage) && (
                           <MediaPreview
+                            key={`preview-${adopted.id}-${adopted.localVideo ?? ""}-${adopted.localImage ?? ""}`}
                             type={adopted.localVideo ? "video" : "image"}
                             src={adopted.localVideo ?? adopted.localImage}
                             poster={adopted.localImage}
@@ -540,10 +661,9 @@ function ShotCard({
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="seedream">Seedream</SelectItem>
-                    <SelectItem value="flux">Flux</SelectItem>
-                    <SelectItem value="midjourney">Midjourney</SelectItem>
-                    <SelectItem value="dalle3">DALL·E 3</SelectItem>
+                    <SelectItem value={DEFAULT_IMAGE_PROVIDER}>
+                      {IMAGE_PROVIDER_LABELS[DEFAULT_IMAGE_PROVIDER]}
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>

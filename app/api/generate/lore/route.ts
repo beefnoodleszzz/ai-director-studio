@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import axios from "axios";
+import { callTextModel } from "@/lib/text-api";
 
 const SYSTEM_PROMPT = `你是一位顶尖的商业短剧编剧和世界观设计师，专注于为抖音、小红书等短视频平台创作高爆款内容。
 
@@ -34,38 +34,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "idea is required" }, { status: 400 });
     }
 
-    const apiKey = process.env.DEEPSEEK_API_KEY;
-    const baseUrl = process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com/v1";
-    const model = process.env.DEEPSEEK_MODEL ?? "deepseek-chat";
-
-    if (!apiKey) {
-      return NextResponse.json({ error: "DEEPSEEK_API_KEY is not configured" }, { status: 500 });
-    }
-
-    const response = await axios.post(
-      `${baseUrl}/chat/completions`,
-      {
-        model,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: `我的创意：${idea.trim()}\n\n请帮我生成完整的世界观设定。`,
-          },
-        ],
-        temperature: 0.85,
-        max_tokens: 1000,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        timeout: 60_000,
-      }
-    );
-
-    const lore = response.data?.choices?.[0]?.message?.content as string;
+    const lore = await callTextModel({
+      systemPrompt: SYSTEM_PROMPT,
+      userPrompt: `我的创意：${idea.trim()}\n\n请帮我生成完整的世界观设定。`,
+      temperature: 0.85,
+      maxOutputTokens: 2000,
+      reasoningEffort: "high",
+    });
     return NextResponse.json({ lore });
   } catch (err) {
     console.error("[generate/lore]", err);
